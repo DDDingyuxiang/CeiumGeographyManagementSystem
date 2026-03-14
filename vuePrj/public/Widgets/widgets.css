@@ -358,7 +358,8 @@
   touch-action: none;
 }
 .cesium-widget-credits {
-  display: block;
+  display: none !important;
+  visibility: hidden !important;
   position: absolute;
   bottom: 0;
   left: 0;

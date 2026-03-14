@@ -10,7 +10,7 @@ declare module 'vue-router' {
 const routes = [
     {
         path:'/',
-        redirect: '/login'
+        redirect: '/workbench'
     },
     {
         path:'/login',
@@ -24,7 +24,7 @@ const routes = [
         component:()=>import('@/views/Profile.vue'),
         meta:{
             title:'用户信息',
-            // requiredAuth:true
+            requiredAuth:true
         }
     },
     {
@@ -33,7 +33,16 @@ const routes = [
         component:()=>import('@/views/Workbench.vue'),
         meta:{
             title:'数据查看与操作',
-            // requiredAuth:true
+            requiredAuth:true
+        }
+    },
+    {
+        path:'/settings',
+        name:'Settings',
+        component:()=>import('@/views/settings.vue'),
+        meta:{
+            title:'系统设置',
+            requiredAuth:true
         }
     }
 ];

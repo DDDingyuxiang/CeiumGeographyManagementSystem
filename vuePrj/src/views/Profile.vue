@@ -270,44 +270,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import axios from 'axios'
 
 const router = useRouter()
 const fileInputRef = ref<HTMLInputElement>()
 const showLogoutDialog = ref(false)
 const activeFilter = ref('all')
 
+const loading = ref(true);
+
 // ==================== 用户信息 ====================
-// TODO: 替换为实际 API 获取用户信息
-// const res = await fetch('/api/user/profile', {
-//   headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-// })
-// const userInfo = await res.json()
 const userInfo = ref({
-  name: '张三',
-  email: 'zhangsan@example.com',
+  name: '',
+  email: '',
   avatar: '',
   role: '用户',
-  createdAt: '2024-01-15',
-  lastLogin: '2026-03-06',
-  usedStorage: '1.2 GB',
+  createdAt: '',
+  lastLogin: '刚刚',
+  usedStorage: '0 KB',
   totalStorage: '10 GB',
-  usedBytes: 1.2,
-  totalBytes: 10,
+  usedBytes: 0,
+  totalBytes: 10 * 1024 * 1024 * 1024, // 10GB 字节数
 })
+
+
 
 const storagePercent = computed(() =>
   Math.round((userInfo.value.usedBytes / userInfo.value.totalBytes) * 100)
 )
 
 // ==================== 数据列表 ====================
-// TODO: 替换为实际 API 获取数据列表
-// const res = await fetch('/api/user/datasets', {
-//   headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-// })
-// const dataList = await res.json()
 interface DataItem {
   id: number
   name: string
@@ -316,22 +311,50 @@ interface DataItem {
   uploadDate: string
 }
 
-const dataList = ref<DataItem[]>([
-  {
-    id: 1,
-    name: '城市道路网络.geojson',
-    type: 'vector',
-    size: '4.3 MB',
-    uploadDate: '2026-02-20',
-  },
-  {
-    id: 2,
-    name: '土地利用影像_2025.tif',
-    type: 'raster',
-    size: '128.6 MB',
-    uploadDate: '2026-03-01',
-  },
-])
+const dataList = ref<DataItem[]>([])
+
+
+onMounted(async () => {
+  const token = localStorage.getItem('token')
+  if (!token) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
+
+  try {
+    loading.value = true
+    // 1. 获取用户基本资料
+    const res = await axios.get('http://localhost:3000/api/users/profile', {
+      headers: { Authorization: token }
+    })
+
+    if (res.data.code === 200) {
+      const d = res.data.data
+      // 填充数据
+      userInfo.value.name = d.name
+      userInfo.value.email = d.account
+      // 注意：拼接后端地址
+      userInfo.value.avatar = d.avatar ? `http://localhost:3000${d.avatar}` : ''
+      userInfo.value.role = d.role
+      // 格式化日期：2023-10-27
+      userInfo.value.createdAt = new Date(d.createdAt).toLocaleDateString()
+      await fetchDataList()
+      // 后续如果有关联查询，这里可以处理 dataList
+      // dataList.value = d.dataAssets || []
+    }
+  } catch (error: any) {
+    if (error.response?.status === 401) {
+      ElMessage.error('身份验证失效，请重新登录')
+      localStorage.clear()
+      router.push('/login')
+    } else {
+      ElMessage.error('获取个人信息失败')
+    }
+  } finally {
+    loading.value = false
+  }
+})
 
 const filteredList = computed(() => {
   if (activeFilter.value === 'all') return dataList.value
@@ -349,14 +372,33 @@ function viewData(row: DataItem) {
 
 // ==================== 操作：移除 ====================
 async function removeData(row: DataItem) {
-  // TODO: 替换为实际移除 API
-  // await fetch(`/api/datasets/${row.id}`, {
-  //   method: 'DELETE',
-  //   headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-  // })
+  try{
+    await ElMessageBox.confirm(
+      `确定要永久删除数据 ${row.name} 吗？此操作不可撤销。`,
+      '警告',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
 
-  dataList.value = dataList.value.filter(d => d.id !== row.id)
-  ElMessage.success(`已移除：${row.name}`)
+    const token = localStorage.getItem('token')
+    // 注意：将 'delete-data' 改为 'datasets' 以匹配后端路由
+const res = await axios.delete(`http://localhost:3000/api/users/datasets/${row.id}`, {
+  headers: { Authorization: token }
+})
+
+
+
+    if(res.data.code === 200){
+      ElMessage.success(`已删除：${row.name}`)
+      // 刷新数据列表
+      await fetchDataList()
+    }
+    } catch (error) {
+      ElMessage.error('删除数据失败')
+    }
 }
 
 // ==================== 操作：添加（本地文件） ====================
@@ -364,12 +406,13 @@ function triggerFileAdd() {
   fileInputRef.value?.click()
 }
 
-function handleFileAdd(e: Event) {
+async function handleFileAdd(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
 
+  // 1. 前端校验格式
   const ext = file.name.split('.').pop()?.toLowerCase()
-  const vectorExts = ['geojson', 'json', 'shp', 'kml', 'gpx']
+  const vectorExts = ['geojson', 'json', 'shp', 'kml', 'gpx','geoJson']
   const rasterExts = ['tif', 'tiff', 'png', 'jpg', 'img']
 
   let type: 'vector' | 'raster' | null = null
@@ -380,33 +423,104 @@ function handleFileAdd(e: Event) {
     return
   }
 
-  const sizeKB = file.size / 1024
-  const sizeStr = sizeKB > 1024
-    ? `${(sizeKB / 1024).toFixed(1)} MB`
-    : `${sizeKB.toFixed(1)} KB`
+  // 2. 准备上传
+  const formData = new FormData()
+  formData.append('file', file) 
+  // 如果后端需要额外的字段（比如 type），可以在这里添加
+  formData.append('type', type) 
 
-  const newItem: DataItem = {
-    id: Date.now(),
-    name: file.name,
-    type,
-    size: sizeStr,
-    uploadDate: new Date().toISOString().split('T')[0] ?? '',
+  try {
+    let token = localStorage.getItem('token')
+    if (!token) {
+      ElMessage.error('登录过期，请重新登录')
+      router.push('/login')
+      return
+    }
+
+    // 修复：确保 Token 带有 Bearer 前缀（如果存储时没加的话）
+    const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`
+
+    const res = await axios.post('http://localhost:3000/api/users/upload-data', formData, {
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+
+    if (res.data.code === 200) {
+      ElMessage.success(`上传成功：${file.name}`)
+      
+      // 3. 刷新列表和用户信息（更新存储容量显示）
+      await fetchDataList() 
+      
+      // 如果后端返回了新的存储信息，可以直接更新，减少一次请求
+      if(res.data.data.usedBytes) {
+        userInfo.value.usedBytes = res.data.data.usedBytes
+        userInfo.value.usedStorage = formatBytes(res.data.data.usedBytes)
+      }
+    } else {
+      // 处理后端返回了 200 但 code 不是 200 的逻辑错误
+      ElMessage.error(res.data.message || '上传业务异常')
+    }
+  } catch (error: any) {
+    console.error('上传失败详情:', error)
+    // 细化错误提示
+    const status = error.response?.status
+    const errorMsg = error.response?.data?.message || '服务器连接失败'
+    
+    if (status === 413) {
+      ElMessage.error('文件体积过大，超过服务器限制')
+    } else if (status === 401) {
+      ElMessage.error('登录失效，请重新登录')
+      router.push('/login')
+    } else {
+      ElMessage.error(`数据上传失败: ${errorMsg}`)
+    }
+  } finally {
+    if (fileInputRef.value) fileInputRef.value.value = ''
   }
+}
 
-  // TODO: 替换为实际上传 API
-  // const formData = new FormData()
-  // formData.append('file', file)
-  // const res = await fetch('/api/datasets/upload', {
-  //   method: 'POST',
-  //   headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-  //   body: formData,
-  // })
-  // const saved = await res.json()
-  // newItem.id = saved.id
+// 辅助函数：格式化字节显示
+function formatBytes(bytes: number) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
 
-  dataList.value.unshift(newItem)
-  ElMessage.success(`已添加：${file.name}`)
-  ;(e.target as HTMLInputElement).value = ''
+// 建议补全这个列表刷新函数
+async function fetchDataList() {
+  try {
+    const token = localStorage.getItem('token')
+    // 对应后端 userRoutes.ts 中的 router.get('/datasets', ...)
+    const res = await axios.get('http://localhost:3000/api/users/datasets', {
+      headers: { Authorization: token }
+    })
+
+    if (res.data.code === 200) {
+      // 【关键点】：将后端返回的数据映射到前端 dataList 模型
+      dataList.value = res.data.data.map((item: any) => ({
+        id: item._id, // 将数据库的 _id 映射给前端的 id
+        name: item.name,
+        type: item.type,
+        // 格式化文件大小显示
+        size: item.size > 1024 * 1024 
+          ? (item.size / (1024 * 1024)).toFixed(2) + ' MB' 
+          : (item.size / 1024).toFixed(2) + ' KB',
+        // 格式化上传时间
+        uploadDate: new Date(item.createdAt).toLocaleDateString()
+      }))
+    }
+
+    const totalUsedBytes = res.data.data.reduce((sum:number, item:any) => sum + (item.size||0), 0)
+    userInfo.value.usedBytes = totalUsedBytes
+    userInfo.value.usedStorage = formatBytes(totalUsedBytes)
+  } catch (err) {
+    console.error('获取列表失败:', err)
+    ElMessage.error('无法加载数据列表')
+  }
 }
 
 // ==================== 导航 ====================
@@ -419,10 +533,8 @@ function handleLogout() {
 }
 
 function confirmLogout() {
-  // TODO: 替换为实际退出 API
-  // await fetch('/api/auth/logout', { method: 'POST', ... })
-
   localStorage.removeItem('token')
+  localStorage.clear()
   showLogoutDialog.value = false
   ElMessage.success('已退出登录')
   router.push('/login')
@@ -605,7 +717,7 @@ function confirmLogout() {
 .info-val { font-size: 13px; color: #94a3b8; }
 .info-val.accent { color: #60a5fa; font-weight: 600; }
 
-.storage-section { }
+
 .storage-header {
   display: flex;
   justify-content: space-between;

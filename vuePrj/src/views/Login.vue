@@ -220,6 +220,8 @@
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import axios from 'axios'
+import router from '@/router'
 
 // ==================== 状态 ====================
 const isRegister = ref(false)
@@ -315,32 +317,38 @@ function toggleMode() {
 }
 
 // ==================== 登录提交 ====================
+// Login.vue 中的 submitLogin 函数
 async function submitLogin() {
   await loginFormRef.value?.validate(async (valid) => {
-    if (!valid) return
-    loading.value = true
+    if (!valid) return;
+    loading.value = true;
+    
     try {
-      // TODO: 替换为实际登录 API
-      // const res = await fetch('/api/auth/login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({
-      //     account: loginForm.account,
-      //     password: loginForm.password,
-      //   }),
-      // })
-      // const data = await res.json()
-      // localStorage.setItem('token', data.token)
-      // router.push('/')
+      const res = await axios.post('http://localhost:3000/api/auth/login', {
+        account: loginForm.account,
+        password: loginForm.password,
+      });
 
-      await new Promise(r => setTimeout(r, 1200)) // 模拟请求
-      ElMessage.success('登录成功')
-    } catch {
-      ElMessage.error('登录失败，请稍后重试')
+      if (res.data.code === 200) {
+        const { token, user } = res.data.data;
+
+        // --- 核心：持久化存储 ---
+        localStorage.setItem('token', token);
+        // 如果你有用户信息，也可以存一下，或者存入 Pinia
+        localStorage.setItem('userInfo', JSON.stringify(user));
+
+        ElMessage.success('欢迎回来，' + user.name);
+
+        // 跳转到数据工作台
+        router.push('/workbench'); 
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.message || '登录失败，请检查账号密码';
+      ElMessage.error(msg);
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  })
+  });
 }
 
 // ==================== 注册提交 ====================
@@ -348,26 +356,47 @@ async function submitRegister() {
   await registerFormRef.value?.validate(async (valid) => {
     if (!valid) return
     loading.value = true
+    
     try {
-      // TODO: 替换为实际注册 API
-      // const formData = new FormData()
-      // formData.append('name', registerForm.name)
-      // formData.append('account', registerForm.account)
-      // formData.append('password', registerForm.password)
-      // if (avatarFile.value) formData.append('avatar', avatarFile.value)
-      // const res = await fetch('/api/auth/register', {
-      //   method: 'POST',
-      //   body: formData,
-      // })
-      // const data = await res.json()
-      // ElMessage.success('注册成功，请登录')
-      // toggleMode()
+      const formData = new FormData();
+      formData.append('name', registerForm.name);
+      formData.append('account', registerForm.account);
+      formData.append('password', registerForm.password);
+      formData.append('confirmPassword', registerForm.confirmPassword);
+      if (avatarFile.value) {
+        formData.append('avatar', avatarFile.value); 
+      }
 
-      await new Promise(r => setTimeout(r, 1200)) // 模拟请求
-      ElMessage.success('注册成功，请登录')
-      toggleMode()
-    } catch {
-      ElMessage.error('注册失败，请稍后重试')
+      // 发送请求
+      const res = await axios.post('http://localhost:3000/api/auth/register', formData);
+
+      // --- 成功提醒 ---
+      if (res.status === 201 || res.data.code === 200) {
+        ElMessage({
+          message: '✨ 账号创建成功！欢迎加入地理信息管理平台',
+          type: 'success',
+          duration: 3000,
+          showClose: true
+        });
+        
+        // 延迟跳转，给用户看提醒的时间
+        setTimeout(() => {
+          toggleMode(); // 切换到登录界面
+        }, 1200);
+      }
+    } catch (error: any) {
+      // --- 失败提醒 ---
+      // 优先显示后端返回的错误（如：邮箱已被占用），否则显示通用错误
+      const errorMsg = error.response?.data?.message || '注册遇到问题，请检查网络后重试';
+      
+      ElMessage({
+        message: `注册失败: ${errorMsg}`,
+        type: 'error',
+        duration: 5000,
+        showClose: true
+      });
+      
+      console.error('Registration failed:', error);
     } finally {
       loading.value = false
     }
