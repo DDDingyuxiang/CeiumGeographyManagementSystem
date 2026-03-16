@@ -23,8 +23,10 @@
     "express": "^5.2.1",
     "geoserver-node-client": "^1.6.0",
     "jsonwebtoken": "^9.0.3",
+    "knex": "^3.1.0",
     "mongoose": "^9.2.4",
-    "multer": "^2.1.1"
+    "multer": "^2.1.1",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",

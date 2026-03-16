@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import * as Cesium from 'cesium'
-import '../Widgets/widgets.css'
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { ElDropdown, ElDropdownMenu, ElDropdownItem, ElCollapse, ElCollapseItem, ElMessage, ElTree } from 'element-plus';
-import type { CollapseModelValue } from 'element-plus';
-import axios from 'axios';
-
-
+import * as Cesium from "cesium";
+import "../Widgets/widgets.css";
+import { onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import {
+  ElDropdown,
+  ElDropdownMenu,
+  ElDropdownItem,
+  ElCollapse,
+  ElCollapseItem,
+  ElMessage,
+  ElTree,
+} from "element-plus";
+import type { CollapseModelValue } from "element-plus";
+import axios from "axios";
 declare global {
   interface Window {
     CESIUM_BASE_URL?: string;
@@ -29,60 +35,62 @@ const isDragging = ref(false);
 
 // 图层数据
 const layerData = ref([
-  { id:0, label: '基础图层', visible: true },
+  { id: 0, label: "基础图层", visible: true, cesiumLayer: null },
 ]);
 
 // 用户数据
-const userData = ref([
-  { id: '', label: '', type: '', size: '' },
-]);
+const userData = ref([{ id: "", label: "", type: "", size: "" }]);
 
 // 工具箱数据
 const toolCategories = ref([
   {
-    id: 'vector',
-    title: '矢量工具箱',
+    id: "vector",
+    title: "矢量工具箱",
     tools: [
-      { name: '坐标转换', desc: '投影互转' },
-      { name: '格式转换', desc: 'Shapefile/GeoJSON/KML/GML互转' },
-      { name: '要素简化', desc: '抽稀边界优化渲染性能' },
-      { name: '缓冲区分析', desc: '生成点线面影响范围' },
-      { name: '叠加分析', desc: '交集/并集/擦除操作' },
-      { name: '质心提取', desc: '计算多边形几何中心' },
-      { name: '字段计算', desc: 'SQL/Python表达式批量修改' },
-      { name: '空间连接', desc: '基于位置关系属性赋值' }
-    ]
+      { name: "坐标转换", desc: "投影互转" },
+      { name: "格式转换", desc: "Shapefile/GeoJSON/KML/GML互转" },
+      { name: "要素简化", desc: "抽稀边界优化渲染性能" },
+      { name: "缓冲区分析", desc: "生成点线面影响范围" },
+      { name: "叠加分析", desc: "交集/并集/擦除操作" },
+      { name: "质心提取", desc: "计算多边形几何中心" },
+      { name: "字段计算", desc: "SQL/Python表达式批量修改" },
+      { name: "空间连接", desc: "基于位置关系属性赋值" },
+    ],
   },
   {
-    id: 'raster',
-    title: '栅格工具箱',
+    id: "raster",
+    title: "栅格工具箱",
     tools: [
-      { name: '裁剪与掩膜', desc: '按范围裁剪TIF影像' },
-      { name: '影像拼接', desc: '多幅影像无缝缝合' },
-      { name: '重采样', desc: '改变像素分辨率' },
-      { name: '坡度/坡向', desc: '提取地形起伏特征' },
-      { name: '等高线提取', desc: '自动提取矢量等高线' },
-      { name: '山体阴影', desc: '生成立体感渲染图' },
-      { name: '植被指数(NDVI)', desc: '计算植被覆盖度' },
-      { name: '波段组合', desc: '真彩色/假彩色合成' }
-    ]
+      { name: "裁剪与掩膜", desc: "按范围裁剪TIF影像" },
+      { name: "影像拼接", desc: "多幅影像无缝缝合" },
+      { name: "重采样", desc: "改变像素分辨率" },
+      { name: "坡度/坡向", desc: "提取地形起伏特征" },
+      { name: "等高线提取", desc: "自动提取矢量等高线" },
+      { name: "山体阴影", desc: "生成立体感渲染图" },
+      { name: "植被指数(NDVI)", desc: "计算植被覆盖度" },
+      { name: "波段组合", desc: "真彩色/假彩色合成" },
+    ],
   },
   {
-    id: 'general',
-    title: '其他工具箱',
+    id: "general",
+    title: "其他工具箱",
     tools: [
-      { name: '一键发布', desc: '自动发布WMS/WMTS服务' },
-      { name: '服务切片', desc: '预生成GeoWebCache瓦片' },
-      { name: '自动化出图', desc: '生成带图例PDF/PNG' },
-      { name: '报表生成', desc: '统计结果生成Word/PDF' }
-    ]
-  }
+      { name: "一键发布", desc: "自动发布WMS/WMTS服务" },
+      { name: "服务切片", desc: "预生成GeoWebCache瓦片" },
+      { name: "自动化出图", desc: "生成带图例PDF/PNG" },
+      { name: "报表生成", desc: "统计结果生成Word/PDF" },
+    ],
+  },
 ]);
 
-let viewer: Cesium.Viewer | null = null;
+// 清理数据列表
+const createdResources = ref<{ storeName: string; layerName: string }[]>([]);
 
+let viewer: Cesium.Viewer | null = null;
 onMounted(async () => {
-  viewer = new Cesium.Viewer('cesiumContainer', {
+  window.addEventListener("beforeunload", handleCleanup);
+
+  viewer = new Cesium.Viewer("cesiumContainer", {
     infoBox: false, // 禁用信息框
     selectionIndicator: false, // 禁用选择指示器
     baseLayerPicker: false,
@@ -93,10 +101,10 @@ onMounted(async () => {
     animation: false,
     timeline: false,
     fullscreenButton: false,
-    baseLayer:new Cesium.ImageryLayer(
+    baseLayer: new Cesium.ImageryLayer(
       new Cesium.UrlTemplateImageryProvider({
-        url:'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-        credit:'高德影像路网'
+        url: "https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}",
+        credit: "高德影像路网",
       })
     ),
   });
@@ -105,99 +113,215 @@ onMounted(async () => {
 
   // 设置中国区域视角
   viewer.camera.setView({
-    destination: Cesium.Rectangle.fromDegrees(73.5, 18.0, 135.0, 53.5)
+    destination: Cesium.Rectangle.fromDegrees(73.5, 18.0, 135.0, 53.5),
   });
 
-  
   viewer.selectedEntityChanged.addEventListener(() => {
     if (viewer) viewer.selectedEntity = undefined;
   });
-  
+
   viewer.screenSpaceEventHandler.setInputAction(() => {
     if (viewer) viewer.selectedEntity = undefined;
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 });
 
+onUnmounted(() => {
+  handleCleanup(); // 视情况开启
+});
+
+// 处理用户命令
 const handleUserCommand = (command: string) => {
-  if (command === 'profile') {
-    router.push('/profile');
-  } else if (command === 'settings') {
-    router.push('/settings');
+  if (command === "profile") {
+    router.push("/profile");
+  } else if (command === "settings") {
+    router.push("/settings");
   }
 };
 
-const syncLayersToUI = async()=>{
+// 同步图层到UI
+const syncLayersToUI = async () => {};
 
-};
-
-
-const toggleLeftPanel =  async() => {
+// 切换左侧面板
+const toggleLeftPanel = async () => {
   leftPanelActive.value = !leftPanelActive.value;
-  try{
+  try {
     syncLayersToUI();
 
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem("token");
     // 对应后端 userRoutes.ts 中的 router.get('/datasets', ...)
-    const res = await axios.get('http://localhost:3000/api/users/datasets', {
-      headers: { Authorization: token }
-    })
+    const res = await axios.get("http://localhost:3000/api/users/datasets", {
+      headers: { Authorization: token },
+    });
     if (res.data.code === 200) {
       // 【关键点】：将后端返回的数据映射到前端 dataList 模型
       userData.value = res.data.data.map((item: any) => ({
         id: item._id, // 将数据库的 _id 映射给前端的 id
         label: item.name,
+        filename: item.filename,
         type: item.type,
         // 格式化文件大小显示
-        size: item.size > 1024 * 1024 
-          ? (item.size / (1024 * 1024)).toFixed(2) + ' MB' 
-          : (item.size / 1024).toFixed(2) + ' KB',
-      }))
+        size:
+          item.size > 1024 * 1024
+            ? (item.size / (1024 * 1024)).toFixed(2) + " MB"
+            : (item.size / 1024).toFixed(2) + " KB",
+      }));
     }
-  }catch(err){
-    ElMessage.error('获取数据集失败');
+  } catch (err) {
+    ElMessage.error("获取数据集失败");
   }
 };
 
+// 切换右侧面板
 const toggleRightPanel = () => {
   rightPanelActive.value = !rightPanelActive.value;
 };
 
+// 切换图层可见性
 const toggleLayerVisibility = (data: any) => {
   data.visible = !data.visible;
-  if(!viewer){
+  if (!viewer) {
     return;
   }
-  let baselayer =  viewer.imageryLayers.get(0)
-  if(baselayer.imageryProvider.credit.html === '高德影像路网'){
-    baselayer.show = !baselayer.show;
+  if (data.id === 0) {
+    let baselayer = viewer.imageryLayers.get(0);
+    baselayer.show = data.visible;
   }
-  
+  // 如果是用户动态加载的图层
+  else if (data.cesiumLayer) {
+    data.cesiumLayer.show = data.visible;
+  }
 };
 
+// 处理节点上下文菜单
 const handleNodeContextMenu = (event: Event, data: any) => {
   event.preventDefault();
-  console.log('右键菜单:', data);
+  console.log("右键菜单:", data);
 };
 
+// 处理拖动开始
 const handleDragStart = (item: any, event: DragEvent) => {
   draggedItem.value = item;
   isDragging.value = true;
   if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'copy';
-    event.dataTransfer.setData('text/plain', JSON.stringify(item));
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("text/plain", JSON.stringify(item));
   }
 };
 
+// 处理拖动结束
 const handleDragEnd = () => {
   isDragging.value = false;
   draggedItem.value = null;
 };
 
+// 处理拖动到地图上
+const handleDropOnMap = async () => {
+  if (!draggedItem.value || !viewer) {
+    console.warn("条件不满足: draggedItem 为空或 viewer 未初始化");
+    return;
+  }
+
+  const itemId = draggedItem.value.id;
+  const itemName = draggedItem.value.label;
+  const itemFilename = draggedItem.value.filename;
+
+  const loading = ElMessage.info({
+    message: `正在发布数据：${draggedItem.value.label}...`,
+    duration: 0,
+  });
+  try {
+    const token = localStorage.getItem("token");
+    const res = await axios.post(
+      "http://localhost:3000/api/users/datasets/publish",
+      {
+        filename: itemFilename || itemName,
+        assetId: itemId,
+      },
+      {
+        headers: { Authorization: token },
+      }
+    );
+    if (res.data.code === 200) {
+      const { storeName, layerName, wmsUrl, layers, viewparams } = res.data;
+      const parameters: any = {
+        service: "WMS",
+        format: "image/png",
+        transparent: true,
+        viewparams: res.data.viewparams,
+      };
+
+      if (viewparams) {
+        parameters.viewparams = viewparams;
+      }
+
+      const provider = new Cesium.WebMapServiceImageryProvider({
+        url: wmsUrl,
+        layers: layers,
+        parameters: parameters,
+      });
+
+      const imageryLayer = (viewer as any).imageryLayers.addImageryProvider(
+        provider
+      );
+
+      createdResources.value.push({
+        storeName: storeName,
+        layerName: layerName,
+      });
+      layerData.value.push({
+        id: itemId,
+        label: itemName,
+        visible: true,
+        cesiumLayer: imageryLayer, // 保存引用以便后续控制显隐
+      });
+
+      loading.close();
+      ElMessage.success(`数据加载成功：${itemName}`);
+    }
+  } catch (err: any) {
+    loading.close();
+    ElMessage.error(
+      `数据发布失败：${err.response?.data?.message || "未知错误"}`
+    );
+  } finally {
+    loading.close();
+    isDragging.value = false;
+    draggedItem.value = null;
+  }
+};
+
+// 执行工具
 const executeTool = (toolName: string) => {
   ElMessage.info(`正在启动: ${toolName}`);
 };
 
+// 处理页面关闭时清理资源
+const handleCleanup = () => {
+  if (createdResources.value.length === 0) return;
 
+  const url = "http://localhost:3000/api/users/datasets/cleanup";
+  const data = JSON.stringify({
+    workspace: "user_data_space",
+    resources: createdResources.value,
+  });
+
+  // 1. 优先使用 sendBeacon，它在页面关闭时非常可靠
+  if (navigator.sendBeacon) {
+    const blob = new Blob([data], { type: "application/json" });
+    navigator.sendBeacon(url, blob);
+  } else {
+    // 2. 备用 fetch
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: data,
+      keepalive: true,
+    });
+  }
+
+  // 清空数组防止重复触发
+  createdResources.value = [];
+};
 </script>
 
 <template>
@@ -212,9 +336,20 @@ const executeTool = (toolName: string) => {
         <div class="top-bar-left">
           <div class="brand">
             <svg viewBox="0 0 40 40" fill="none" class="brand-svg">
-              <circle cx="20" cy="20" r="18" stroke="white" stroke-width="2" opacity="0.35"/>
-              <path d="M12 20 L20 12 L28 20 L20 28 Z" fill="white" opacity="0.9"/>
-              <circle cx="20" cy="20" r="4" fill="white"/>
+              <circle
+                cx="20"
+                cy="20"
+                r="18"
+                stroke="white"
+                stroke-width="2"
+                opacity="0.35"
+              />
+              <path
+                d="M12 20 L20 12 L28 20 L20 28 Z"
+                fill="white"
+                opacity="0.9"
+              />
+              <circle cx="20" cy="20" r="4" fill="white" />
             </svg>
             <span class="brand-name">地理信息管理平台</span>
           </div>
@@ -222,27 +357,51 @@ const executeTool = (toolName: string) => {
           <span class="breadcrumb-cur">操作台</span>
         </div>
         <div class="top-bar-right">
-          <el-dropdown trigger="click" @command="handleUserCommand" class="user-dropdown">
+          <el-dropdown
+            trigger="click"
+            @command="handleUserCommand"
+            class="user-dropdown"
+          >
             <div class="menu-trigger">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="menu-icon">
-                <line x1="3" y1="6" x2="21" y2="6"/>
-                <line x1="3" y1="12" x2="21" y2="12"/>
-                <line x1="3" y1="18" x2="21" y2="18"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                class="menu-icon"
+              >
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </div>
             <template #dropdown>
               <el-dropdown-menu class="custom-dropdown">
                 <el-dropdown-item command="profile">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="dropdown-icon">
-                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                    <circle cx="12" cy="7" r="4"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    class="dropdown-icon"
+                  >
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
                   </svg>
                   <span>我的信息</span>
                 </el-dropdown-item>
                 <el-dropdown-item command="settings">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="dropdown-icon">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    class="dropdown-icon"
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                      d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+                    />
                   </svg>
                   <span>设置</span>
                 </el-dropdown-item>
@@ -254,20 +413,48 @@ const executeTool = (toolName: string) => {
 
       <!-- 主体内容 -->
       <main class="workbench-main">
-        
         <!-- 左侧工具条 (始终显示) -->
         <aside class="side-bar left-bar">
-          <div 
-            class="bar-icon-btn" 
-            :class="{ active: leftPanelActive }" 
+          <div
+            class="bar-icon-btn"
+            :class="{ active: leftPanelActive }"
             @click="toggleLeftPanel"
             title="资源管理"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
               <!-- 重叠方块图标 -->
-              <rect x="2" y="2" width="9" height="9" rx="1.5" fill="currentColor" opacity="0.3"/>
-              <rect x="6" y="6" width="9" height="9" rx="1.5" fill="currentColor" opacity="0.6"/>
-              <rect x="10" y="10" width="9" height="9" rx="1.5" fill="currentColor" opacity="0.9"/>
+              <rect
+                x="2"
+                y="2"
+                width="9"
+                height="9"
+                rx="1.5"
+                fill="currentColor"
+                opacity="0.3"
+              />
+              <rect
+                x="6"
+                y="6"
+                width="9"
+                height="9"
+                rx="1.5"
+                fill="currentColor"
+                opacity="0.6"
+              />
+              <rect
+                x="10"
+                y="10"
+                width="9"
+                height="9"
+                rx="1.5"
+                fill="currentColor"
+                opacity="0.9"
+              />
             </svg>
           </div>
         </aside>
@@ -280,11 +467,11 @@ const executeTool = (toolName: string) => {
                 <h3 class="panel-title">资源管理</h3>
                 <div class="close-btn" @click="leftPanelActive = false">×</div>
               </div>
-              
+
               <div class="panel-body">
                 <!-- 图层列表 -->
                 <div class="content-section">
-                <div class="section-title">地图图层</div>
+                  <div class="section-title">地图图层</div>
                   <el-tree
                     :data="layerData"
                     default-expand-all
@@ -295,14 +482,35 @@ const executeTool = (toolName: string) => {
                     <template #default="{ node, data }">
                       <div class="layer-node">
                         <span class="node-label">{{ data.label }}</span>
-                        <div class="visibility-toggle" @click.stop="toggleLayerVisibility(data)">
-                          <svg v-if="data.visible" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="eye-icon">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
+                        <div
+                          class="visibility-toggle"
+                          @click.stop="toggleLayerVisibility(data)"
+                        >
+                          <svg
+                            v-if="data.visible"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            class="eye-icon"
+                          >
+                            <path
+                              d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+                            />
+                            <circle cx="12" cy="12" r="3" />
                           </svg>
-                          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="eye-icon">
-                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                            <line x1="1" y1="1" x2="23" y2="23"/>
+                          <svg
+                            v-else
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            class="eye-icon"
+                          >
+                            <path
+                              d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"
+                            />
+                            <line x1="1" y1="1" x2="23" y2="23" />
                           </svg>
                         </div>
                       </div>
@@ -324,34 +532,54 @@ const executeTool = (toolName: string) => {
                       draggable="true"
                       @dragstart="handleDragStart(item, $event)"
                       @dragend="handleDragEnd"
-                      :class="{ dragging: isDragging && draggedItem?.id === item.id }"
+                      :class="{
+                        dragging: isDragging && draggedItem?.id === item.id,
+                      }"
                     >
                       <div class="data-icon-wrap" :class="item.type">
-                        <svg v-if="item.type === 'vector'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="type-svg">
-                          <polygon points="12 2 22 20 2 20"/>
-                          <circle cx="12" cy="2" r="2" fill="currentColor"/>
-                          <circle cx="22" cy="20" r="2" fill="currentColor"/>
-                          <circle cx="2" cy="20" r="2" fill="currentColor"/>
+                        <svg
+                          v-if="item.type === 'vector'"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.6"
+                          class="type-svg"
+                        >
+                          <polygon points="12 2 22 20 2 20" />
+                          <circle cx="12" cy="2" r="2" fill="currentColor" />
+                          <circle cx="22" cy="20" r="2" fill="currentColor" />
+                          <circle cx="2" cy="20" r="2" fill="currentColor" />
                         </svg>
-                        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="type-svg">
-                          <rect x="3" y="3" width="18" height="18" rx="2"/>
-                          <line x1="3" y1="9" x2="21" y2="9"/>
-                          <line x1="3" y1="15" x2="21" y2="15"/>
-                          <line x1="9" y1="3" x2="9" y2="21"/>
-                          <line x1="15" y1="3" x2="15" y2="21"/>
+                        <svg
+                          v-else
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.6"
+                          class="type-svg"
+                        >
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <line x1="3" y1="9" x2="21" y2="9" />
+                          <line x1="3" y1="15" x2="21" y2="15" />
+                          <line x1="9" y1="3" x2="9" y2="21" />
+                          <line x1="15" y1="3" x2="15" y2="21" />
                         </svg>
                       </div>
                       <div class="data-info">
                         <span class="data-name">{{ item.label }}</span>
                         <span class="data-meta">{{ item.size }}</span>
                       </div>
-                      <svg viewBox="0 0 24 24" fill="currentColor" class="drag-indicator">
-                        <circle cx="9" cy="6" r="1.5"/>
-                        <circle cx="9" cy="12" r="1.5"/>
-                        <circle cx="9" cy="18" r="1.5"/>
-                        <circle cx="15" cy="6" r="1.5"/>
-                        <circle cx="15" cy="12" r="1.5"/>
-                        <circle cx="15" cy="18" r="1.5"/>
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        class="drag-indicator"
+                      >
+                        <circle cx="9" cy="6" r="1.5" />
+                        <circle cx="9" cy="12" r="1.5" />
+                        <circle cx="9" cy="18" r="1.5" />
+                        <circle cx="15" cy="6" r="1.5" />
+                        <circle cx="15" cy="12" r="1.5" />
+                        <circle cx="15" cy="18" r="1.5" />
                       </svg>
                     </div>
                   </div>
@@ -362,15 +590,25 @@ const executeTool = (toolName: string) => {
         </transition>
 
         <!-- Cesium 地图容器 -->
-        <div class="map-container">
+        <div
+          class="map-container"
+          @dragenter.prevent
+          @dragover.prevent
+          @drop="handleDropOnMap"
+        >
           <div id="cesiumContainer"></div>
           <!-- 拖拽提示 -->
           <div v-if="isDragging" class="drag-overlay">
             <div class="drag-hint">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
               <span>释放以加载数据到场景</span>
             </div>
@@ -379,19 +617,57 @@ const executeTool = (toolName: string) => {
 
         <!-- 右侧工具条 (始终显示) -->
         <aside class="side-bar right-bar">
-          <div 
-            class="bar-icon-btn" 
-            :class="{ active: rightPanelActive }" 
+          <div
+            class="bar-icon-btn"
+            :class="{ active: rightPanelActive }"
             @click="toggleRightPanel"
             title="工具箱"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
               <!-- 工具箱图标 -->
-              <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor"/>
-              <rect x="13" y="4" width="7" height="7" rx="1" stroke="currentColor"/>
-              <rect x="4" y="13" width="7" height="7" rx="1" stroke="currentColor"/>
-              <rect x="13" y="13" width="7" height="7" rx="1" stroke="currentColor"/>
-              <path d="M7.5 7.5h0M16.5 7.5h0M7.5 16.5h0M16.5 16.5h0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <rect
+                x="4"
+                y="4"
+                width="7"
+                height="7"
+                rx="1"
+                stroke="currentColor"
+              />
+              <rect
+                x="13"
+                y="4"
+                width="7"
+                height="7"
+                rx="1"
+                stroke="currentColor"
+              />
+              <rect
+                x="4"
+                y="13"
+                width="7"
+                height="7"
+                rx="1"
+                stroke="currentColor"
+              />
+              <rect
+                x="13"
+                y="13"
+                width="7"
+                height="7"
+                rx="1"
+                stroke="currentColor"
+              />
+              <path
+                d="M7.5 7.5h0M16.5 7.5h0M7.5 16.5h0M16.5 16.5h0"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
             </svg>
           </div>
         </aside>
@@ -404,9 +680,13 @@ const executeTool = (toolName: string) => {
                 <h3 class="panel-title">工具箱</h3>
                 <div class="close-btn" @click="rightPanelActive = false">×</div>
               </div>
-              
+
               <div class="panel-body">
-                <el-collapse v-model="activeToolCategory" accordion class="custom-collapse">
+                <el-collapse
+                  v-model="activeToolCategory"
+                  accordion
+                  class="custom-collapse"
+                >
                   <el-collapse-item
                     v-for="category in toolCategories"
                     :key="category.id"
@@ -421,17 +701,47 @@ const executeTool = (toolName: string) => {
                         @click="executeTool(tool.name)"
                       >
                         <div class="tool-icon-box" :class="category.id">
-                          <svg v-if="category.id === 'vector'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="tool-svg">
-                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                          <svg
+                            v-if="category.id === 'vector'"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            class="tool-svg"
+                          >
+                            <path
+                              d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+                            />
                           </svg>
-                          <svg v-else-if="category.id === 'raster'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="tool-svg">
-                            <rect x="3" y="3" width="18" height="18" rx="2"/>
-                            <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
-                            <path d="M21 15l-5-5L5 21"/>
+                          <svg
+                            v-else-if="category.id === 'raster'"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            class="tool-svg"
+                          >
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle
+                              cx="8.5"
+                              cy="8.5"
+                              r="1.5"
+                              fill="currentColor"
+                            />
+                            <path d="M21 15l-5-5L5 21" />
                           </svg>
-                          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="tool-svg">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 6.34L2.1 2.1m17.8 17.8l-4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.24 4.24l4.24 4.24M2.1 2.1l4.24 4.24"/>
+                          <svg
+                            v-else
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            class="tool-svg"
+                          >
+                            <circle cx="12" cy="12" r="3" />
+                            <path
+                              d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 6.34L2.1 2.1m17.8 17.8l-4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.24 4.24l4.24 4.24M2.1 2.1l4.24 4.24"
+                            />
                           </svg>
                         </div>
                         <div class="tool-detail">
@@ -452,9 +762,11 @@ const executeTool = (toolName: string) => {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap");
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -464,7 +776,7 @@ const executeTool = (toolName: string) => {
 .workbench-bg {
   min-height: 100vh;
   background: #080d18;
-  font-family: 'Noto Serif SC', serif;
+  font-family: "Noto Serif SC", serif;
   position: relative;
   overflow: hidden;
 }
@@ -472,8 +784,11 @@ const executeTool = (toolName: string) => {
 .grid-overlay {
   position: fixed;
   inset: 0;
-  background-image: linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+  background-image: linear-gradient(
+      rgba(59, 130, 246, 0.04) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
   z-index: 0;
@@ -522,7 +837,7 @@ const executeTool = (toolName: string) => {
   padding: 0 24px;
   background: rgba(8, 13, 24, 0.8);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
   z-index: 100;
 }
@@ -547,17 +862,17 @@ const executeTool = (toolName: string) => {
 .brand-name {
   font-size: 17px;
   font-weight: 600;
-  color: rgba(255,255,255,0.9);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .breadcrumb-sep {
-  color: rgba(255,255,255,0.2);
+  color: rgba(255, 255, 255, 0.2);
   font-size: 18px;
 }
 
 .breadcrumb-cur {
   font-size: 15px;
-  color: rgba(255,255,255,0.45);
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .top-bar-right {
@@ -570,12 +885,12 @@ const executeTool = (toolName: string) => {
   padding: 8px;
   border-radius: 8px;
   transition: all 0.2s;
-  color: rgba(255,255,255,0.6);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .menu-trigger:hover {
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.9);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .menu-icon {
@@ -586,15 +901,15 @@ const executeTool = (toolName: string) => {
 /* 下拉菜单样式 */
 :deep(.custom-dropdown) {
   background: #111827 !important;
-  border: 1px solid rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 10px !important;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.4) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4) !important;
   padding: 6px !important;
 }
 
 :deep(.custom-dropdown .el-dropdown-menu__item) {
   color: #94a3b8 !important;
-  font-family: 'Noto Serif SC', serif !important;
+  font-family: "Noto Serif SC", serif !important;
   font-size: 14px !important;
   padding: 10px 16px !important;
   border-radius: 6px !important;
@@ -604,7 +919,7 @@ const executeTool = (toolName: string) => {
 }
 
 :deep(.custom-dropdown .el-dropdown-menu__item:hover) {
-  background: rgba(37,99,235,0.15) !important;
+  background: rgba(37, 99, 235, 0.15) !important;
   color: #60a5fa !important;
 }
 
@@ -623,7 +938,7 @@ const executeTool = (toolName: string) => {
 
 /* ===== 侧边工具条 (常驻) ===== */
 .side-bar {
- position: absolute;
+  position: absolute;
   top: 20px; /* 距离顶部一点距离 */
   width: auto; /* 宽度由内容决定 */
   background: transparent; /* 消除背景条 */
@@ -655,9 +970,9 @@ const executeTool = (toolName: string) => {
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.3s;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(249, 243, 243, 0.966);
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .bar-icon-btn svg {
@@ -666,15 +981,15 @@ const executeTool = (toolName: string) => {
 }
 
 .bar-icon-btn:hover {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   color: #60a5fa;
   transform: scale(1.05);
 }
 
 .bar-icon-btn.active {
-  background: rgba(37,99,235,0.2);
+  background: rgba(37, 99, 235, 0.2);
   color: #60a5fa;
-  border-color: rgba(37,99,235,0.3);
+  border-color: rgba(37, 99, 235, 0.3);
 }
 
 /* ===== 滑出面板样式 ===== */
@@ -691,13 +1006,13 @@ const executeTool = (toolName: string) => {
 }
 
 .left-panel {
-  left: 0px; 
-  border-right: 1px solid rgba(255,255,255,0.06);
+  left: 0px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .right-panel {
-  right: 0px; 
-  border-left: 1px solid rgba(255,255,255,0.06);
+  right: 0px;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* 滑动动画 */
@@ -731,7 +1046,7 @@ const executeTool = (toolName: string) => {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .panel-title {
@@ -754,7 +1069,7 @@ const executeTool = (toolName: string) => {
 }
 
 .close-btn:hover {
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   color: #f87171;
 }
 
@@ -787,7 +1102,7 @@ const executeTool = (toolName: string) => {
 .drag-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(8,13,24,0.8);
+  background: rgba(8, 13, 24, 0.8);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -802,7 +1117,7 @@ const executeTool = (toolName: string) => {
   align-items: center;
   gap: 16px;
   padding: 32px 48px;
-  background: rgba(17,24,39,0.9);
+  background: rgba(17, 24, 39, 0.9);
   border: 2px dashed #2563eb;
   border-radius: 16px;
   color: #60a5fa;
@@ -827,7 +1142,7 @@ const executeTool = (toolName: string) => {
 
 .section-divider {
   height: 1px;
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   margin: 20px 0;
 }
 
@@ -844,7 +1159,7 @@ const executeTool = (toolName: string) => {
 }
 
 :deep(.custom-tree .el-tree-node__content:hover) {
-  background: rgba(255,255,255,0.04) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
 }
 
 .layer-node {
@@ -869,7 +1184,7 @@ const executeTool = (toolName: string) => {
 }
 
 .visibility-toggle:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   color: #60a5fa;
 }
 
@@ -890,22 +1205,22 @@ const executeTool = (toolName: string) => {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   cursor: move;
   transition: all 0.2s;
 }
 
 .data-card:hover {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(37,99,235,0.3);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(37, 99, 235, 0.3);
 }
 
 .data-card.dragging {
   opacity: 0.5;
   border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37,99,235,0.2);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 .data-icon-wrap {
@@ -919,12 +1234,12 @@ const executeTool = (toolName: string) => {
 }
 
 .data-icon-wrap.vector {
-  background: rgba(34,197,94,0.12);
+  background: rgba(34, 197, 94, 0.12);
   color: #4ade80;
 }
 
 .data-icon-wrap.raster {
-  background: rgba(234,179,8,0.12);
+  background: rgba(234, 179, 8, 0.12);
   color: #facc15;
 }
 
@@ -970,7 +1285,7 @@ const executeTool = (toolName: string) => {
 :deep(.custom-collapse .el-collapse-item__header) {
   background: transparent !important;
   color: #e2e8f0 !important;
-  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
   height: 48px !important;
   font-size: 14px !important;
   font-weight: 600 !important;
@@ -997,14 +1312,14 @@ const executeTool = (toolName: string) => {
   align-items: center;
   gap: 14px;
   padding: 12px;
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .tool-card:hover {
-  background: rgba(37,99,235,0.08);
+  background: rgba(37, 99, 235, 0.08);
 }
 
 .tool-icon-box {
@@ -1017,11 +1332,23 @@ const executeTool = (toolName: string) => {
   flex-shrink: 0;
 }
 
-.tool-icon-box.vector { background: rgba(34,197,94,0.12); color: #4ade80; }
-.tool-icon-box.raster { background: rgba(234,179,8,0.12); color: #facc15; }
-.tool-icon-box.general { background: rgba(99,102,241,0.12); color: #818cf8; }
+.tool-icon-box.vector {
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+}
+.tool-icon-box.raster {
+  background: rgba(234, 179, 8, 0.12);
+  color: #facc15;
+}
+.tool-icon-box.general {
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+}
 
-.tool-svg { width: 18px; height: 18px; }
+.tool-svg {
+  width: 18px;
+  height: 18px;
+}
 
 .tool-detail {
   flex: 1;
@@ -1042,13 +1369,22 @@ const executeTool = (toolName: string) => {
 
 /* 动画 */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 /* 滚动条 */
@@ -1062,11 +1398,11 @@ const executeTool = (toolName: string) => {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.2);
 }
 </style>

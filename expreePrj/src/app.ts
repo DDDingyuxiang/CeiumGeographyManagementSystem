@@ -15,7 +15,14 @@ const port = process.env.PORT || 3000;
 app.use('uploads',express.static(path.join(process.cwd(),'uploads')))
 
 // 中间件
-app.use(cors()); //允许跨域
+app.use(cors({
+	origin: 'http://localhost:5173',
+	credentials: true,
+	methods: ['GET', 'POST', 'DELETE'],
+	allowedHeaders: ['Content-Type', 'Authorization'],
+})); //允许跨域
+app.options('/api/datasets/cleanup', cors());
+
 app.use(express.json()); //解析json请求体
 app.use(express.urlencoded({ extended: true })); //解析url编码的请求体
 
