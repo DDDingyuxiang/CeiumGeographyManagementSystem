@@ -88,7 +88,7 @@ const createdResources = ref<{ storeName: string; layerName: string }[]>([]);
 
 let viewer: Cesium.Viewer | null = null;
 onMounted(async () => {
-  window.addEventListener("beforeunload", handleCleanup);
+  window.addEventListener('beforeunload', handleCleanup);
 
   viewer = new Cesium.Viewer("cesiumContainer", {
     infoBox: false, // 禁用信息框
@@ -231,6 +231,7 @@ const handleDropOnMap = async () => {
   });
   try {
     const token = localStorage.getItem("token");
+    // 对应后端 userRoutes.ts 中的 router.post('/datasets/publish', ...)
     const res = await axios.post(
       "http://localhost:3000/api/users/datasets/publish",
       {
@@ -243,6 +244,7 @@ const handleDropOnMap = async () => {
     );
     if (res.data.code === 200) {
       const { storeName, layerName, wmsUrl, layers, viewparams } = res.data;
+	  console.log("后端返回原始存储名:", storeName);
       const parameters: any = {
         service: "WMS",
         format: "image/png",
@@ -279,6 +281,8 @@ const handleDropOnMap = async () => {
       ElMessage.success(`数据加载成功：${itemName}`);
     }
   } catch (err: any) {
+    console.log(err);
+
     loading.close();
     ElMessage.error(
       `数据发布失败：${err.response?.data?.message || "未知错误"}`
@@ -299,26 +303,26 @@ const executeTool = (toolName: string) => {
 const handleCleanup = () => {
   if (createdResources.value.length === 0) return;
 
-  const url = "http://localhost:3000/api/users/datasets/cleanup";
+  const url = 'http://localhost:3000/api/users/datasets/cleanup';
   const data = JSON.stringify({
-    workspace: "user_data_space",
-    resources: createdResources.value,
+    workspace: 'user_data_space',
+    resources: createdResources.value
   });
 
   // 1. 优先使用 sendBeacon，它在页面关闭时非常可靠
   if (navigator.sendBeacon) {
-    const blob = new Blob([data], { type: "application/json" });
+    const blob = new Blob([data], { type: 'application/json' });
     navigator.sendBeacon(url, blob);
   } else {
     // 2. 备用 fetch
     fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: data,
-      keepalive: true,
+      keepalive: true 
     });
   }
-
+  
   // 清空数组防止重复触发
   createdResources.value = [];
 };
@@ -588,6 +592,7 @@ const handleCleanup = () => {
             </div>
           </aside>
         </transition>
+
 
         <!-- Cesium 地图容器 -->
         <div

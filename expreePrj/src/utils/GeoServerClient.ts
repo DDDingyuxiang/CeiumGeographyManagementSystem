@@ -54,6 +54,7 @@ export class GeoServerClient {
       return await this.client.delete(coverageUrl);
     } catch (e: any) {
       if (e.response?.status === 404) {
+        console.log(`栅格路径未找到，尝试矢量路径: ${dataUrl}`);
         return await this.client.delete(dataUrl);
       }
       throw e;

@@ -100,6 +100,8 @@ export const publishData = async (req: Request, res: Response) => {
             const commonName = `tiff_${uniqueId}`; // Store 和 Layer 用同一个名字
             const absolutePath = path.resolve(filePath).replace(/\\/g, '/');
 
+            const storeName = `tiff_store_${Date.now()}`;
+            const layerName = `tiff_layer_${Date.now()}`;
             await gsClient.coveragestores.create(workspace, {
                 name: commonName,
                 type: "GeoTIFF",
@@ -125,14 +127,18 @@ export const publishData = async (req: Request, res: Response) => {
 
 			rawData = rawData.replace(/^\uFEFF/, '').trim();
 
+    		// 调试打印：如果依然报错，查看前10个字符的十六进制编码
+    		console.log("清洗后内容预览:", rawData.substring(0, 10));
+    		console.log("第一个字符编码:", rawData.charCodeAt(0));
+
             const geoJson = JSON.parse(rawData);
 
             // 1. 准备数据
             const features = geoJson.features.map((f: any) => ({
                 user_id: userid,
-                asset_id: assetId, 
+                asset_id: assetId, // 必须确保有这个值，否则 SQL View 查不到
                 properties: JSON.stringify(f.properties),
-                // ST_SetSRID 强制设为 4326
+                // 建议：ST_SetSRID 强制设为 4326
                 geom: db.raw(`ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)`, [JSON.stringify(f.geometry)]),
             }));
 
@@ -164,10 +170,18 @@ export const cleanupResources = async (req: Request, res: Response) => {
     
 
   for (const item of resources) {
+    console.log(`正在从 GeoServer 执行彻底删除: ${item.storeName}`); // 确认这个名字是否正确
     try {
       await gsClient.coveragestores.delete(workspace, item.storeName);
     } catch (e: any) {
       console.error("--- GeoServer 拒收详情 ---");
+  if (e.response) {
+    console.error("状态码:", e.response.status);
+    console.error("错误响应体:", e.response.data); // 这里是关键，看它说了什么
+  } else {
+    console.error("错误消息:", e.message);
+  }
+  console.error("--------------------------");
     }
   }
   res.json({ code: 200, message: "清理指令执行完毕" });
