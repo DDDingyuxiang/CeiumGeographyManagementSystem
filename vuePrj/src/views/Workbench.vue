@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as Cesium from "cesium";
 import "../Widgets/widgets.css";
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
   ElDropdown,
@@ -33,9 +33,17 @@ const activeToolCategory = ref<CollapseModelValue>([]);
 const draggedItem = ref<any>(null);
 const isDragging = ref(false);
 
+interface LayerItem {
+  id: number | string;
+  label: string;
+  visible: boolean;
+  cesiumLayer: Cesium.ImageryLayer | null;
+  type: string;
+}
+
 // 图层数据
-const layerData = ref([
-  { id: 0, label: "基础图层", visible: true, cesiumLayer: null },
+const layerData = ref<LayerItem[]>([
+  { id: 0, label: "基础图层", visible: true, cesiumLayer: null, type: "" },
 ]);
 
 // 用户数据
@@ -47,38 +55,42 @@ const toolCategories = ref([
     id: "vector",
     title: "矢量工具箱",
     tools: [
-      { name: "坐标转换", desc: "投影互转" },
-      { name: "格式转换", desc: "Shapefile/GeoJSON/KML/GML互转" },
-      { name: "要素简化", desc: "抽稀边界优化渲染性能" },
-      { name: "缓冲区分析", desc: "生成点线面影响范围" },
-      { name: "叠加分析", desc: "交集/并集/擦除操作" },
-      { name: "质心提取", desc: "计算多边形几何中心" },
-      { name: "字段计算", desc: "SQL/Python表达式批量修改" },
-      { name: "空间连接", desc: "基于位置关系属性赋值" },
+      { name: "坐标转换", desc: "投影互转", toolId: 10001 },
+      {
+        name: "格式转换",
+        desc: "Shapefile/GeoJSON/KML/GML互转",
+        toolId: 10002,
+      },
+      { name: "要素简化", desc: "抽稀边界优化渲染性能", toolId: 10003 },
+      { name: "缓冲区分析", desc: "生成点线面影响范围", toolId: 10004 },
+      { name: "叠加分析", desc: "交集/并集/擦除操作", toolId: 10005 },
+      { name: "质心提取", desc: "计算多边形几何中心", toolId: 10006 },
+      { name: "字段计算", desc: "SQL/Python表达式批量修改", toolId: 10007 },
+      { name: "空间连接", desc: "基于位置关系属性赋值", toolId: 10008 },
     ],
   },
   {
     id: "raster",
     title: "栅格工具箱",
     tools: [
-      { name: "裁剪与掩膜", desc: "按范围裁剪TIF影像" },
-      { name: "影像拼接", desc: "多幅影像无缝缝合" },
-      { name: "重采样", desc: "改变像素分辨率" },
-      { name: "坡度/坡向", desc: "提取地形起伏特征" },
-      { name: "等高线提取", desc: "自动提取矢量等高线" },
-      { name: "山体阴影", desc: "生成立体感渲染图" },
-      { name: "植被指数(NDVI)", desc: "计算植被覆盖度" },
-      { name: "波段组合", desc: "真彩色/假彩色合成" },
+      { name: "裁剪与掩膜", desc: "按范围裁剪TIF影像", toolId: 20001 },
+      { name: "影像拼接", desc: "多幅影像无缝缝合", toolId: 20002 },
+      { name: "重采样", desc: "改变像素分辨率", toolId: 20003 },
+      { name: "坡度/坡向", desc: "提取地形起伏特征", toolId: 20004 },
+      { name: "等高线提取", desc: "自动提取矢量等高线", toolId: 20005 },
+      { name: "山体阴影", desc: "生成立体感渲染图", toolId: 20006 },
+      { name: "植被指数(NDVI)", desc: "计算植被覆盖度", toolId: 20007 },
+      { name: "波段组合", desc: "真彩色/假彩色合成", toolId: 20008 },
     ],
   },
   {
     id: "general",
     title: "其他工具箱",
     tools: [
-      { name: "一键发布", desc: "自动发布WMS/WMTS服务" },
-      { name: "服务切片", desc: "预生成GeoWebCache瓦片" },
-      { name: "自动化出图", desc: "生成带图例PDF/PNG" },
-      { name: "报表生成", desc: "统计结果生成Word/PDF" },
+      { name: "一键发布", desc: "自动发布WMS/WMTS服务", toolId: 30001 },
+      { name: "服务切片", desc: "预生成GeoWebCache瓦片", toolId: 30002 },
+      { name: "自动化出图", desc: "生成带图例PDF/PNG", toolId: 30003 },
+      { name: "报表生成", desc: "统计结果生成Word/PDF", toolId: 30004 },
     ],
   },
 ]);
@@ -88,7 +100,7 @@ const createdResources = ref<{ storeName: string; layerName: string }[]>([]);
 
 let viewer: Cesium.Viewer | null = null;
 onMounted(async () => {
-  window.addEventListener('beforeunload', handleCleanup);
+  window.addEventListener("beforeunload", handleCleanup);
 
   viewer = new Cesium.Viewer("cesiumContainer", {
     infoBox: false, // 禁用信息框
@@ -105,7 +117,7 @@ onMounted(async () => {
       new Cesium.UrlTemplateImageryProvider({
         url: "https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}",
         credit: "高德影像路网",
-      })
+      }),
     ),
   });
 
@@ -127,6 +139,15 @@ onMounted(async () => {
 
 onUnmounted(() => {
   handleCleanup(); // 视情况开启
+});
+
+// 在 script setup 中添加
+const displayedLayers = computed(() => {
+  // 基础图层始终在底部（索引0），用户图层反转显示
+  const base = layerData.value.filter((l) => l.id === 0);
+  const userLayers = layerData.value.filter((l) => l.id !== 0);
+  // UI 显示：用户图层在上（数组前面），基础图层在下（数组末尾）
+  return [...userLayers.reverse(), ...base];
 });
 
 // 处理用户命令
@@ -156,7 +177,9 @@ const toggleLeftPanel = async () => {
       // 【关键点】：将后端返回的数据映射到前端 dataList 模型
       userData.value = res.data.data.map((item: any) => ({
         id: item._id, // 将数据库的 _id 映射给前端的 id
-        label: item.name,
+        label: item.name.toLowerCase().endsWith(".zip")
+          ? item.name.replace(/\.zip$/i, ".shp")
+          : item.name,
         filename: item.filename,
         type: item.type,
         // 格式化文件大小显示
@@ -224,6 +247,7 @@ const handleDropOnMap = async () => {
   const itemId = draggedItem.value.id;
   const itemName = draggedItem.value.label;
   const itemFilename = draggedItem.value.filename;
+  const itemType = draggedItem.value.type;
 
   const loading = ElMessage.info({
     message: `正在发布数据：${draggedItem.value.label}...`,
@@ -240,11 +264,10 @@ const handleDropOnMap = async () => {
       },
       {
         headers: { Authorization: token },
-      }
+      },
     );
     if (res.data.code === 200) {
       const { storeName, layerName, wmsUrl, layers, viewparams } = res.data;
-	  console.log("后端返回原始存储名:", storeName);
       const parameters: any = {
         service: "WMS",
         format: "image/png",
@@ -263,7 +286,7 @@ const handleDropOnMap = async () => {
       });
 
       const imageryLayer = (viewer as any).imageryLayers.addImageryProvider(
-        provider
+        provider,
       );
 
       createdResources.value.push({
@@ -275,6 +298,7 @@ const handleDropOnMap = async () => {
         label: itemName,
         visible: true,
         cesiumLayer: imageryLayer, // 保存引用以便后续控制显隐
+        type: itemType,
       });
 
       loading.close();
@@ -285,13 +309,88 @@ const handleDropOnMap = async () => {
 
     loading.close();
     ElMessage.error(
-      `数据发布失败：${err.response?.data?.message || "未知错误"}`
+      `数据发布失败：${err.response?.data?.message || "未知错误"}`,
     );
   } finally {
     loading.close();
     isDragging.value = false;
     draggedItem.value = null;
   }
+};
+
+// 检查是否允许将图层拖入到指定位置
+const allowDrop = (draggingNode: any, dropNode: any, type: string) => {
+  // 1. 严禁嵌套：只能在节点前后移动
+  if (type === "inner") return false;
+
+  // 2. 保护底图：任何图层都不允许移动到基础图层（id:0）的下方
+  if (dropNode.data.id === 0 && type === "next") return false;
+
+  return true;
+};
+
+// 检查是否允许拖动图层
+const allowDrag = (node: any) => {
+  return node.data.id !== 0;
+};
+
+// 处理图层拖动顺序渲染的事件
+const handleLayerDrop = (
+  draggingNode: any,
+  dropNode: any,
+  dropType: string,
+  ev: DragEvent,
+) => {
+  if (!viewer) return;
+
+  // 1. 立即给当前的 Provider 们留个快照，防止被 remove 删没了找不到
+  const providerCache = new Map();
+  layerData.value.forEach((item) => {
+    if (item.id !== 0 && item.cesiumLayer) {
+      providerCache.set(item.id, (item.cesiumLayer as any).imageryProvider);
+    }
+  });
+
+  // 2. 核心修复：同步 Vue 的源数据顺序
+  // 既然 el-tree 已经把 displayedLayers 的顺序改了，我们得让 layerData 跟上
+  // 过滤掉底图，拿到当前 UI 上的用户图层顺序（从上到下）
+  const newUiOrder = displayedLayers.value.filter((item) => item.id !== 0);
+
+  // 更新源数据 layerData：[底图, ...反转后的UI顺序]
+  // 为什么要反转？因为 layerData 原始逻辑里索引大的在上面，而 UI 是索引小的在上面
+  layerData.value = [
+    ...layerData.value.filter((item) => item.id === 0), // 保留底图在第一项
+    ...[...newUiOrder].reverse(),
+  ];
+
+  // 3. 暴力重绘 Cesium
+  const imageryLayers = viewer!.imageryLayers;
+
+  // 清除所有非底图（保留 index 0）
+  while (imageryLayers.length > 1) {
+    imageryLayers.remove(imageryLayers.get(1));
+  }
+
+  // 4. 按照 UI 的顺序重新 add
+  // UI 数组是 [顶层, ..., 底层]，我们要想让“顶层”真的在最上面，就得最后加它
+  // 所以这里我们从 UI 数组的末尾（底层）开始往 Cesium 里加
+  for (let i = newUiOrder.length - 1; i >= 0; i--) {
+    const item = newUiOrder[i]!;
+    const provider = providerCache.get(item.id);
+
+    if (provider) {
+      const newLayer = imageryLayers.addImageryProvider(provider);
+      newLayer.show = item.visible;
+
+      // 【关键】把新的图层引用塞回源数据，下次拖拽或开关显隐才能找到它
+      const target = layerData.value.find((l) => l.id === item.id);
+      if (target) {
+        target.cesiumLayer = newLayer as any;
+      }
+    }
+  }
+
+  viewer!.scene.requestRender();
 };
 
 // 执行工具
@@ -303,26 +402,26 @@ const executeTool = (toolName: string) => {
 const handleCleanup = () => {
   if (createdResources.value.length === 0) return;
 
-  const url = 'http://localhost:3000/api/users/datasets/cleanup';
+  const url = "http://localhost:3000/api/users/datasets/cleanup";
   const data = JSON.stringify({
-    workspace: 'user_data_space',
-    resources: createdResources.value
+    workspace: "user_data_space",
+    resources: createdResources.value,
   });
 
   // 1. 优先使用 sendBeacon，它在页面关闭时非常可靠
   if (navigator.sendBeacon) {
-    const blob = new Blob([data], { type: 'application/json' });
+    const blob = new Blob([data], { type: "application/json" });
     navigator.sendBeacon(url, blob);
   } else {
     // 2. 备用 fetch
     fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: data,
-      keepalive: true 
+      keepalive: true,
     });
   }
-  
+
   // 清空数组防止重复触发
   createdResources.value = [];
 };
@@ -477,44 +576,88 @@ const handleCleanup = () => {
                 <div class="content-section">
                   <div class="section-title">地图图层</div>
                   <el-tree
-                    :data="layerData"
+                    :data="displayedLayers"
                     default-expand-all
                     node-key="id"
+                    draggable
+                    :allow-drop="allowDrop"
+                    :allow-drag="allowDrag"
+                    @node-drop="handleLayerDrop"
                     @node-contextmenu="handleNodeContextMenu"
                     class="custom-tree"
                   >
                     <template #default="{ node, data }">
                       <div class="layer-node">
-                        <span class="node-label">{{ data.label }}</span>
+                        <div class="node-left">
+                          <span class="layer-type-tag" v-if="data.id !== 0">
+                            <svg
+                              v-if="data.type === 'vector'"
+                              class="type-mini-svg vector"
+                              viewBox="0 0 24 24"
+                            >
+                              <polygon
+                                points="12 2 22 20 2 20"
+                                fill="currentColor"
+                              />
+                            </svg>
+                            <svg
+                              v-else-if="data.type === 'raster'"
+                              class="type-mini-svg raster"
+                              viewBox="0 0 24 24"
+                            >
+                              <rect
+                                x="3"
+                                y="3"
+                                width="18"
+                                height="18"
+                                rx="2"
+                                fill="currentColor"
+                              />
+                            </svg>
+                          </span>
+                          <span class="node-label">{{ data.label }}</span>
+                        </div>
                         <div
                           class="visibility-toggle"
                           @click.stop="toggleLayerVisibility(data)"
                         >
                           <svg
-                            v-if="data.visible"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.5"
+                            width="200"
+                            height="200"
+                            viewBox="0 0 200 200"
+                            xmlns="http://www.w3.org/2000/svg"
+                            v-show="data.visible === true"
                             class="eye-icon"
                           >
-                            <path
-                              d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-                            />
-                            <circle cx="12" cy="12" r="3" />
+                            <rect width="100%" height="100%"fill = 'transparent' />
+
+                            <g stroke="white" stroke-width="3" fill="none">
+                              <ellipse cx="100" cy="100" rx="80" ry="50" />
+
+                              <circle cx="100" cy="100" r="40" />
+                            </g>
                           </svg>
+
                           <svg
-                            v-else
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.5"
+                            width="200"
+                            height="200"
+                            viewBox="0 0 200 200"
+                            xmlns="http://www.w3.org/2000/svg"
+                            v-show="data.visible === false"
                             class="eye-icon"
                           >
-                            <path
-                              d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"
-                            />
-                            <line x1="1" y1="1" x2="23" y2="23" />
+                            <rect width="100%" height="100%"fill = 'transparent' />
+
+                            <g
+                              stroke="white"
+                              stroke-width="3"
+                              fill="none"
+                              stroke-linecap="round"
+                            >
+                              <ellipse cx="100" cy="100" rx="80" ry="50" />
+
+                              <line x1="160" y1="60" x2="40" y2="140" />
+                            </g>
                           </svg>
                         </div>
                       </div>
@@ -592,7 +735,6 @@ const handleCleanup = () => {
             </div>
           </aside>
         </transition>
-
 
         <!-- Cesium 地图容器 -->
         <div
@@ -701,7 +843,7 @@ const handleCleanup = () => {
                     <div class="tools-list">
                       <div
                         v-for="tool in category.tools"
-                        :key="tool.name"
+                        :key="tool.toolId"
                         class="tool-card"
                         @click="executeTool(tool.name)"
                       >
@@ -789,10 +931,8 @@ const handleCleanup = () => {
 .grid-overlay {
   position: fixed;
   inset: 0;
-  background-image: linear-gradient(
-      rgba(59, 130, 246, 0.04) 1px,
-      transparent 1px
-    ),
+  background-image:
+    linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
@@ -1020,6 +1160,33 @@ const handleCleanup = () => {
   border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.node-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.type-mini-svg {
+  width: 14px;
+  height: 14px;
+}
+
+.type-mini-svg.vector {
+  color: #4ade80;
+}
+.type-mini-svg.raster {
+  color: #facc15;
+}
+
+.layer-node {
+  cursor: grab; /* 提示可拖拽 */
+}
+
+/* 拖拽时的样式反馈 */
+:deep(.el-tree-node.is-drop-inner > .el-tree-node__content) {
+  background-color: rgba(37, 99, 235, 0.2) !important;
+}
+
 /* 滑动动画 */
 .slide-left-enter-active,
 .slide-left-leave-active {
@@ -1185,17 +1352,18 @@ const handleCleanup = () => {
   padding: 6px;
   border-radius: 6px;
   transition: all 0.2s;
-  color: #64748b;
+  color: #e2e8f0;
 }
 
 .visibility-toggle:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(11, 16, 27, 0.955);
   color: #60a5fa;
 }
 
 .eye-icon {
   width: 16px;
   height: 16px;
+  color: #e2e8f0;
 }
 
 /* 数据卡片 */

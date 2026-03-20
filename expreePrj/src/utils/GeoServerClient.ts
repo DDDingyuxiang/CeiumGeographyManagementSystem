@@ -80,12 +80,39 @@ export class GeoServerClient {
   }
 };
 
-  // 模拟 .datastores.create() - 如果后续需要物理发布 Shapefile 等
-  public datastores = {
-    create: async (ws: string, data: any) => {
-      // 简化版实现
-      const xml = `<dataStore><name>${data.name}</name></dataStore>`;
-      return this.client.post(`/workspaces/${ws}/datastores`, xml);
+  // GeoServerClient.ts - 确认已有方法
+public datastores = {
+    create: async (ws: string, data: { name: string; url: string; charset?: string }) => {
+        const xml = `<dataStore>
+            <name>${data.name}</name>
+            <type>Shapefile</type>
+            <enabled>true</enabled>
+            <connectionParameters>
+                <entry key="url">${data.url}</entry>
+                <entry key="charset">${data.charset || 'UTF-8'}</entry>
+                <entry key="create spatial index">true</entry>
+                <entry key="namespace">${ws}</entry>
+            </connectionParameters>
+        </dataStore>`;
+        return this.client.post(`/workspaces/${ws}/datastores`, xml, {
+            headers: { 'Content-Type': 'application/xml' }
+        });
+    },
+
+    publish: async (ws: string, store: string, name: string) => {
+        const xml = `<featureType>
+            <name>${name}</name>
+            <title>${name}</title>
+            <srs>EPSG:4326</srs>
+            <enabled>true</enabled>
+        </featureType>`;
+        return this.client.post(`/workspaces/${ws}/datastores/${store}/featuretypes`, xml, {
+            headers: { 'Content-Type': 'application/xml' }
+        });
+    },
+
+    delete: async (ws: string, name: string) => {
+        return this.client.delete(`/workspaces/${ws}/datastores/${name}?recurse=true`);
     }
-  };
+};
 }
