@@ -12,6 +12,8 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     BaseToolModal: typeof import('./src/components/BaseToolModal.vue')['default']
+    BufferForm: typeof import('./src/components/toolsWidget/BufferForm.vue')['default']
+    CoordTransform: typeof import('./src/components/toolsWidget/CoordTransform.vue')['default']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
     ElBadge: typeof import('element-plus/es')['ElBadge']
     ElButton: typeof import('element-plus/es')['ElButton']
@@ -41,7 +43,13 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTimePicker: typeof import('element-plus/es')['ElTimePicker']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    LayerList: typeof import('./src/components/LayerManager/LayerList.vue')['default']
+    MeasureParams: typeof import('./src/components/toolsWidget/MeasureParams.vue')['default']
+    ModalContainer: typeof import('./src/components/ToolModal/ModalContainer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    ToolBox: typeof import('./src/components/ToolBox.vue')['default']
+    ToolDialogContainer: typeof import('./src/components/tool-dialogs/ToolDialogContainer.vue')['default']
+    ToolPanel: typeof import('./src/components/ToolPanel.vue')['default']
   }
 }

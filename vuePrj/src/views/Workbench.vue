@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as Cesium from "cesium";
 import "../Widgets/widgets.css";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, shallowRef, markRaw } from "vue";
 import { useRouter } from "vue-router";
 import {
   ElDropdown,
@@ -14,6 +14,7 @@ import {
 } from "element-plus";
 import type { CollapseModelValue } from "element-plus";
 import axios from "axios";
+import ToolPanel from "@/components/ToolPanel.vue";
 declare global {
   interface Window {
     CESIUM_BASE_URL?: string;
@@ -21,7 +22,6 @@ declare global {
 }
 window.CESIUM_BASE_URL = "/";
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ACCESSTOKEN;
-
 const router = useRouter();
 
 // 面板状态 - 默认只收起面板内容，不收起工具条
@@ -32,6 +32,9 @@ const activeToolCategory = ref<CollapseModelValue>([]);
 // 拖拽状态
 const draggedItem = ref<any>(null);
 const isDragging = ref(false);
+
+// 当前激活中的工具ID
+const activeToolId = ref<number | null>(null);
 
 interface LayerItem {
   id: number | string;
@@ -394,8 +397,8 @@ const handleLayerDrop = (
 };
 
 // 执行工具
-const executeTool = (toolName: string) => {
-  ElMessage.info(`正在启动: ${toolName}`);
+const executeTool = (toolId: number) => {
+  activeToolId.value = toolId;
 };
 
 // 处理页面关闭时清理资源
@@ -760,6 +763,8 @@ const handleCleanup = () => {
               <span>释放以加载数据到场景</span>
             </div>
           </div>
+
+          
         </div>
 
         <!-- 右侧工具条 (始终显示) -->
@@ -845,7 +850,7 @@ const handleCleanup = () => {
                         v-for="tool in category.tools"
                         :key="tool.toolId"
                         class="tool-card"
-                        @click="executeTool(tool.name)"
+                        @click="executeTool(tool.toolId)"
                       >
                         <div class="tool-icon-box" :class="category.id">
                           <svg
@@ -903,6 +908,12 @@ const handleCleanup = () => {
             </div>
           </aside>
         </transition>
+
+        <ToolPanel 
+  :tool-id="activeToolId" 
+  @close="activeToolId = null" 
+/>
+        
       </main>
     </div>
   </div>
