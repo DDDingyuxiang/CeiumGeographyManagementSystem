@@ -1,8 +1,10 @@
 // src/api/request.ts
 import axios from 'axios';
 
+export const BASE_URL = 'http://localhost:3000/api';
+
 const service = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: BASE_URL,
   timeout: 5000
 });
 
