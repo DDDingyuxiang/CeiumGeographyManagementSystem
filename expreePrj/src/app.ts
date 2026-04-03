@@ -1,61 +1,56 @@
 import express, { Request, Response, NextFunction } from "express";
-import authRoutes from './routes/authRoutes.js';
+import authRoutes from "./routes/authRoutes.js";
 import cors from "cors";
 import path from "path";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import userRoutes from "./routes/userRoutes.js";
+import { startExtractedFilesCleanupJob } from "./jobs/cleanupExtractedFiles.js";
 
 dotenv.config();
 
-// 初始化和端口设置
-const app:express.Express = express();
+const app: express.Express = express();
 const port = process.env.PORT || 3000;
 
-app.use('uploads',express.static(path.join(process.cwd(),'uploads')))
-
-// 中间件
-app.use(cors({
-	origin: 'http://localhost:5173',
-	credentials: true,
-	methods: ['GET', 'POST', 'DELETE'],
-	allowedHeaders: ['Content-Type', 'Authorization'],
-})); //允许跨域
-app.options('/api/datasets/cleanup', cors());
-
-app.use(express.json()); //解析json请求体
-app.use(express.urlencoded({ extended: true })); //解析url编码的请求体
-
-// 资源托管
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// 链接数据库
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+    methods: ["GET", "POST", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+app.options("/api/datasets/cleanup", cors());
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 const mongoUrl = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/cesium_db";
 mongoose
-	.connect(mongoUrl)
-	.then(() => console.log("数据库连接成功"))
-	.catch((err) => console.error("数据库连接失败:", err));
+  .connect(mongoUrl)
+  .then(() => console.log("数据库连接成功"))
+  .catch((err) => console.error("数据库连接失败", err));
 
-// 路由使用
-// app.use('/api/auth',authController);
+startExtractedFilesCleanupJob();
 
-// 错误处理中间件
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-	if (err instanceof Error) {
-		return res.status(400).json({
-			status: "error",
-			message: err.message,
-		});
-	}
-    res.status(500).json({message:'内部错误'})
+  if (err instanceof Error) {
+    return res.status(400).json({
+      status: "error",
+      message: err.message,
+    });
+  }
+
+  res.status(500).json({ message: "内部错误" });
 });
 
-app.use('/api/auth', authRoutes);
-app.use('/api/users',userRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
 
-// 端口监听
-app.listen(port || 3000,()=>{
-    console.log("服务启动中");
+app.listen(port || 3000, () => {
+  console.log("服务启动中");
 });
 
 export default app;

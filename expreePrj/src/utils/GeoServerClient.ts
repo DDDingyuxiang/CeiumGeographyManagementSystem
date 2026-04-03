@@ -82,6 +82,15 @@ export class GeoServerClient {
 
   // GeoServerClient.ts - 确认已有方法
 public datastores = {
+    exists: async (ws: string, name: string) => {
+        try {
+            const res = await this.client.get(`/workspaces/${ws}/datastores/${name}.json`);
+            return res.status === 200;
+        } catch {
+            return false;
+        }
+    },
+
     create: async (ws: string, data: { name: string; url: string; charset?: string }) => {
         const xml = `<dataStore>
             <name>${data.name}</name>

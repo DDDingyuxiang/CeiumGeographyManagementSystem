@@ -20,6 +20,12 @@ interface UserDatasetItem {
   size: string;
 }
 
+interface CreatedResourceItem {
+  storeName: string;
+  layerName?: string;
+  resourceType: string;
+}
+
 const props = defineProps<{
   viewer: Cesium.Viewer | null;
 }>();
@@ -37,7 +43,7 @@ const layerData = ref<LayerItem[]>([
 ]);
 
 const userData = ref<UserDatasetItem[]>([]);
-const createdResources = ref<{ storeName: string; layerName: string }[]>([]);
+const createdResources = ref<CreatedResourceItem[]>([]);
 
 const displayedLayers = computed(() => {
   const base = layerData.value.filter((layer) => layer.id === 0);
@@ -153,7 +159,7 @@ const handleDropOnMap = async () => {
     );
 
     if (res.data.code === 200) {
-      const { storeName, layerName, wmsUrl, layers, viewparams } = res.data;
+      const { storeName, layerName, resourceType, wmsUrl, layers, viewparams } = res.data;
       const parameters: Record<string, unknown> = {
         service: "WMS",
         format: "image/png",
@@ -172,7 +178,9 @@ const handleDropOnMap = async () => {
 
       const imageryLayer = props.viewer.imageryLayers.addImageryProvider(provider);
 
-      createdResources.value.push({ storeName, layerName });
+      if (storeName && resourceType) {
+        createdResources.value.push({ storeName, layerName, resourceType });
+      }
       layerData.value.push({
         id: itemId,
         label: itemName,

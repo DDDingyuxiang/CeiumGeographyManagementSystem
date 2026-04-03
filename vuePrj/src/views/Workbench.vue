@@ -37,7 +37,7 @@ onMounted(() => {
     fullscreenButton: false,
     baseLayer: new Cesium.ImageryLayer(
       new Cesium.UrlTemplateImageryProvider({
-        url: "https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}",
+        url: import.meta.env.VITE_GAODE_ACCESSTOKEN,
         credit: "高德影像路网",
       }),
     ),
