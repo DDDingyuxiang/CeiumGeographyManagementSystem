@@ -70,8 +70,8 @@ const toggleLeftPanel = async () => {
 
     const res = await fetchUserDatasets();
 
-    if (res.data.code === 200) {
-      userData.value = res.data.data.map((item: any) => ({
+    if (res.code === 200) {
+      userData.value = res.data.map((item: any) => ({
         id: item._id,
         label: item.name.toLowerCase().endsWith(".zip")
           ? item.name.replace(/\.zip$/i, ".shp")
@@ -151,8 +151,8 @@ const handleDropOnMap = async () => {
       assetId: itemId,
     });
 
-    if (res.data.code === 200) {
-      const { storeName, layerName, resourceType, wmsUrl, layers, viewparams } = res.data;
+    if (res.code === 200) {
+      const { storeName, layerName, resourceType, wmsUrl, layers, viewparams } = res;
       const parameters: Record<string, unknown> = {
         service: "WMS",
         format: "image/png",
@@ -176,7 +176,7 @@ const handleDropOnMap = async () => {
           storeName,
           layerName,
           resourceType,
-          cleanupGroup: res.data.cleanupGroup,
+          cleanupGroup: res.cleanupGroup,
         });
       }
       updateLayers([
@@ -192,7 +192,7 @@ const handleDropOnMap = async () => {
           layers,
           storeName,
           resourceType,
-          cleanupGroup: res.data.cleanupGroup,
+          cleanupGroup: res.cleanupGroup,
         },
       ]);
 
