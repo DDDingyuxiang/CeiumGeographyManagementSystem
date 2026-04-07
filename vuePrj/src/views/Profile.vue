@@ -387,49 +387,73 @@
     </el-dialog>
 
     <el-dialog
-  v-model="showShpCheckDialog"
-  title="完善 SHP 数据文件"
-  width="500px"
-  :close-on-click-modal="false"
->
-  <!-- 对话框内容（使用你原有的样式类名风格） -->
-  <div v-if="pendingShpFile" class="shp-check-body">
-    <div class="check-main-file">
-      <span class="file-name">{{ pendingShpFile.name }}</span>
-      <p>需要以下配套文件才能正常上传</p>
-    </div>
-    
-    <div class="check-list">
-      <div class="check-section">
-        <span class="section-label required">必需文件</span>
-        <div v-for="item in requiredChecks" :key="item.ext" class="check-row">
-          <span :class="['status-dot', item.exists ? 'ok' : 'missing']"></span>
-          <span class="check-name">{{ item.name }}</span>
-          <span class="check-status">{{ item.exists ? '已选择' : '缺失' }}</span>
+      v-model="showShpCheckDialog"
+      title="完善 SHP 数据文件"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <!-- 对话框内容（使用你原有的样式类名风格） -->
+      <div v-if="pendingShpFile" class="shp-check-body">
+        <div class="check-main-file">
+          <span class="file-name">{{ pendingShpFile.name }}</span>
+          <p>需要以下配套文件才能正常上传</p>
+        </div>
+
+        <div class="check-list">
+          <div class="check-section">
+            <span class="section-label required">必需文件</span>
+            <div
+              v-for="item in requiredChecks"
+              :key="item.ext"
+              class="check-row"
+            >
+              <span
+                :class="['status-dot', item.exists ? 'ok' : 'missing']"
+              ></span>
+              <span class="check-name">{{ item.name }}</span>
+              <span class="check-status">{{
+                item.exists ? "已选择" : "缺失"
+              }}</span>
+            </div>
+          </div>
+
+          <div class="check-section">
+            <span class="section-label optional">建议文件</span>
+            <div
+              v-for="item in optionalChecks"
+              :key="item.ext"
+              class="check-row"
+            >
+              <span
+                :class="['status-dot', item.exists ? 'ok' : 'optional-missing']"
+              ></span>
+              <span class="check-name">{{ item.name }}</span>
+              <span class="check-status">{{
+                item.exists ? "已选择" : "可选"
+              }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!canUpload" class="upload-hint">
+          请按住 Ctrl/Cmd 键重新选择，同时选中所有必需文件
         </div>
       </div>
-      
-      <div class="check-section">
-        <span class="section-label optional">建议文件</span>
-        <div v-for="item in optionalChecks" :key="item.ext" class="check-row">
-          <span :class="['status-dot', item.exists ? 'ok' : 'optional-missing']"></span>
-          <span class="check-name">{{ item.name }}</span>
-          <span class="check-status">{{ item.exists ? '已选择' : '可选' }}</span>
-        </div>
-      </div>
-    </div>
-    
-    <div v-if="!canUpload" class="upload-hint">
-      请按住 Ctrl/Cmd 键重新选择，同时选中所有必需文件
-    </div>
-  </div>
-  
-  <template #footer>
-    <el-button @click="showShpCheckDialog = false">取消</el-button>
-    <el-button v-if="!canUpload" type="primary" @click="reselectFiles">重新选择</el-button>
-    <el-button v-else type="success" @click="confirmUpload" :loading="isUploading">确认上传</el-button>
-  </template>
-</el-dialog>
+
+      <template #footer>
+        <el-button @click="showShpCheckDialog = false">取消</el-button>
+        <el-button v-if="!canUpload" type="primary" @click="reselectFiles"
+          >重新选择</el-button
+        >
+        <el-button
+          v-else
+          type="success"
+          @click="confirmUpload"
+          :loading="isUploading"
+          >确认上传</el-button
+        >
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -437,17 +461,22 @@
 import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { fetchUserDatasets } from "@/api/datasets";
+import { fetchUserProfile } from "@/api/users";
+import { uploadUserData } from "@/api/datasets";
+
 import axios from "axios";
+import { log } from "console";
 
 const router = useRouter();
 const fileInputRef = ref<HTMLInputElement>();
 const showLogoutDialog = ref(false);
 const activeFilter = ref("all");
 const loading = ref(true);
-const showShpCheckDialog = ref(false)
-const pendingShpFile = ref<File | null>(null)
-const selectedFiles = ref<File[]>([])
-const isUploading = ref(false)
+const showShpCheckDialog = ref(false);
+const pendingShpFile = ref<File | null>(null);
+const selectedFiles = ref<File[]>([]);
+const isUploading = ref(false);
 
 // ==================== 用户信息 ====================
 const userInfo = ref({
@@ -489,12 +518,10 @@ onMounted(async () => {
   try {
     loading.value = true;
     // 1. 获取用户基本资料
-    const res = await axios.get("http://localhost:3000/api/users/profile", {
-      headers: { Authorization: token },
-    });
+    const res = await fetchUserProfile();
 
-    if (res.data.code === 200) {
-      const d = res.data.data;
+    if (res.code === 200) {
+      const d = res.data;
       // 填充数据
       userInfo.value.name = d.name;
       userInfo.value.email = d.account;
@@ -572,21 +599,21 @@ function triggerFileAdd() {
 const handleFileAdd = async (e: Event) => {
   const files = (e.target as HTMLInputElement).files;
   if (!files || files.length === 0) return;
-  
+
   selectedFiles.value = Array.from(files);
-  
+
   // 检查是否包含SHP文件
-  const shpFile = selectedFiles.value.find(f => 
-    f.name.toLowerCase().endsWith('.shp')
+  const shpFile = selectedFiles.value.find((f) =>
+    f.name.toLowerCase().endsWith(".shp"),
   );
-  
+
   // 如果选了SHP但只有一个文件，提示需要配套文件
   if (shpFile && selectedFiles.value.length === 1) {
     pendingShpFile.value = shpFile;
     showShpCheckDialog.value = true;
     return; // 中断，等待用户补全
   }
-  
+
   // 其他情况直接上传（SHP多文件或非SHP文件）
   await processUpload(selectedFiles.value);
 };
@@ -603,33 +630,34 @@ function formatBytes(bytes: number) {
 // 建议补全这个列表刷新函数
 async function fetchDataList() {
   try {
-    const token = localStorage.getItem('token')
-    const res = await axios.get('http://localhost:3000/api/users/datasets', {
-      headers: { Authorization: token }
-    })
+    const res = await fetchUserDatasets();
 
-    if (res.data.code === 200) {
-      dataList.value = res.data.data.map((item: any) => ({
+    if (res.code === 200) {
+      dataList.value = res.data.map((item: any) => ({
         id: item._id,
         // 前端判断：zip结尾就显示为shp
-        name: item.name.toLowerCase().endsWith('.zip') 
-          ? item.name.replace(/\.zip$/i, '.shp') 
+        name: item.name.toLowerCase().endsWith(".zip")
+          ? item.name.replace(/\.zip$/i, ".shp")
           : item.name,
         type: item.type,
-        size: item.size > 1024 * 1024 
-          ? (item.size / (1024 * 1024)).toFixed(2) + ' MB' 
-          : (item.size / 1024).toFixed(2) + ' KB',
-        uploadDate: new Date(item.createdAt).toLocaleDateString()
-      }))
-      
+        size:
+          item.size > 1024 * 1024
+            ? (item.size / (1024 * 1024)).toFixed(2) + " MB"
+            : (item.size / 1024).toFixed(2) + " KB",
+        uploadDate: new Date(item.createdAt).toLocaleDateString(),
+      }));
+
       // 更新存储空间...
-      const totalUsedBytes = res.data.data.reduce((sum: number, item: any) => sum + (item.size || 0), 0)
-      userInfo.value.usedBytes = totalUsedBytes
-      userInfo.value.usedStorage = formatBytes(totalUsedBytes)
+      const totalUsedBytes = res.data.reduce(
+        (sum: number, item: any) => sum + (item.size || 0),
+        0,
+      );
+      userInfo.value.usedBytes = totalUsedBytes;
+      userInfo.value.usedStorage = formatBytes(totalUsedBytes);
     }
   } catch (err) {
-    console.error('获取列表失败:', err)
-    ElMessage.error('无法加载数据列表')
+    console.error("获取列表失败:", err);
+    ElMessage.error("无法加载数据列表");
   }
 }
 
@@ -651,51 +679,51 @@ function confirmLogout() {
 }
 
 const requiredChecks = computed(() => {
-  if (!pendingShpFile.value) return []
-  const base = pendingShpFile.value.name.replace(/\.shp$/i, '')
-  return ['.shx', '.dbf'].map(ext => ({
+  if (!pendingShpFile.value) return [];
+  const base = pendingShpFile.value.name.replace(/\.shp$/i, "");
+  return [".shx", ".dbf"].map((ext) => ({
     ext,
     name: base + ext,
-    exists: selectedFiles.value.some(f => 
-      f.name.toLowerCase() === (base + ext).toLowerCase()
-    )
-  }))
-})
+    exists: selectedFiles.value.some(
+      (f) => f.name.toLowerCase() === (base + ext).toLowerCase(),
+    ),
+  }));
+});
 
 const optionalChecks = computed(() => {
-  if (!pendingShpFile.value) return []
-  const base = pendingShpFile.value.name.replace(/\.shp$/i, '')
-  return ['.prj', '.cpg'].map(ext => ({
+  if (!pendingShpFile.value) return [];
+  const base = pendingShpFile.value.name.replace(/\.shp$/i, "");
+  return [".prj", ".cpg"].map((ext) => ({
     ext,
     name: base + ext,
-    exists: selectedFiles.value.some(f => 
-      f.name.toLowerCase() === (base + ext).toLowerCase()
-    )
-  }))
-})
+    exists: selectedFiles.value.some(
+      (f) => f.name.toLowerCase() === (base + ext).toLowerCase(),
+    ),
+  }));
+});
 
-const canUpload = computed(() => 
-  requiredChecks.value.every(item => item.exists)
-)
+const canUpload = computed(() =>
+  requiredChecks.value.every((item) => item.exists),
+);
 
 function reselectFiles() {
-  showShpCheckDialog.value = false
-  fileInputRef.value!.value = ''
-  setTimeout(() => fileInputRef.value?.click(), 100)
+  showShpCheckDialog.value = false;
+  fileInputRef.value!.value = "";
+  setTimeout(() => fileInputRef.value?.click(), 100);
 }
 
 async function confirmUpload() {
-  await processUpload(selectedFiles.value)
-  showShpCheckDialog.value = false
+  await processUpload(selectedFiles.value);
+  showShpCheckDialog.value = false;
 }
 
 async function processUpload(files: File[]) {
   if (files.length === 0) return;
 
   // 判断上传模式
-  const hasShp = files.some(f => f.name.toLowerCase().endsWith('.shp'));
+  const hasShp = files.some((f) => f.name.toLowerCase().endsWith(".shp"));
   const isMultiFileShp = hasShp && files.length > 1;
-  
+
   let uploadFile: File | Blob;
   let uploadFileName: string;
   let fileType: "vector" | "raster" | null = null;
@@ -703,31 +731,31 @@ async function processUpload(files: File[]) {
   try {
     // ========== 场景1: 多文件 SHP（打包为ZIP） ==========
     if (isMultiFileShp) {
-      const shpFile = files.find(f => f.name.toLowerCase().endsWith('.shp'))!;
-      const baseName = shpFile.name.replace(/\.shp$/i, '');
-      
+      const shpFile = files.find((f) => f.name.toLowerCase().endsWith(".shp"))!;
+      const baseName = shpFile.name.replace(/\.shp$/i, "");
+
       // 浏览器端打包为ZIP
-      const JSZip = await import('jszip');
+      const JSZip = await import("jszip");
       const zip = new JSZip.default();
-      
+
       // 只打包SHP相关文件，排除无关文件
-      const shpExts = ['.shp', '.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx'];
+      const shpExts = [".shp", ".shx", ".dbf", ".prj", ".cpg", ".sbn", ".sbx"];
       for (const file of files) {
-        const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+        const ext = "." + file.name.split(".").pop()?.toLowerCase();
         if (shpExts.includes(ext)) {
           const content = await file.arrayBuffer();
           zip.file(file.name, content);
         }
       }
-      
-      uploadFile = await zip.generateAsync({ 
-        type: 'blob',
-        compression: 'DEFLATE',
-        compressionOptions: { level: 6 }
+
+      uploadFile = await zip.generateAsync({
+        type: "blob",
+        compression: "DEFLATE",
+        compressionOptions: { level: 6 },
       });
       uploadFileName = `${baseName}.zip`;
       fileType = "vector";
-    } 
+    }
     // ========== 场景2: 单文件（GeoJSON/TIFF等） ==========
     else {
       const file = files[0]!;
@@ -756,7 +784,7 @@ async function processUpload(files: File[]) {
     const formData = new FormData();
     formData.append("file", uploadFile, uploadFileName);
     formData.append("type", fileType!);
-    
+
     // 如果是SHP ZIP，标记格式以便后端识别
     if (isMultiFileShp) {
       formData.append("format", "shp-zip");
@@ -771,40 +799,29 @@ async function processUpload(files: File[]) {
     }
 
     const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+    const res = await uploadUserData(authHeader, formData, (progressEvent) => {
+      // 可选：计算上传进度
+      const percent = Math.round(
+        (progressEvent.loaded * 100) / (progressEvent.total || 1),
+      );
+      console.log(`上传进度: ${percent}%`);
+    });
 
-    const res = await axios.post(
-      "http://localhost:3000/api/users/upload-data",
-      formData,
-      {
-        headers: {
-          Authorization: authHeader,
-          "Content-Type": "multipart/form-data",
-        },
-        onUploadProgress: (progressEvent) => {
-          // 可选：计算上传进度
-          const percent = Math.round(
-            (progressEvent.loaded * 100) / (progressEvent.total || 1)
-          );
-          console.log(`上传进度: ${percent}%`);
-        },
-      }
-    );
-
-    if (res.data.code === 200) {
-      const successMsg = isMultiFileShp 
-        ? `SHP数据上传成功：${uploadFileName.replace('.zip', '')}（含${files.length}个文件）`
+    if (res.code === 200) {
+      const successMsg = isMultiFileShp
+        ? `SHP数据上传成功：${uploadFileName.replace(".zip", "")}（含${files.length}个文件）`
         : `上传成功：${uploadFileName}`;
       ElMessage.success(successMsg);
 
       // 刷新列表和存储信息
       await fetchDataList();
-      
-      if (res.data.data?.usedBytes) {
-        userInfo.value.usedBytes = res.data.data.usedBytes;
-        userInfo.value.usedStorage = formatBytes(res.data.data.usedBytes);
+
+      if (res.data?.usedBytes) {
+        userInfo.value.usedBytes = res.data.usedBytes;
+        userInfo.value.usedStorage = formatBytes(res.data.usedBytes);
       }
     } else {
-      ElMessage.error(res.data.message || "上传业务异常");
+      ElMessage.error(res.message || "上传业务异常");
     }
   } catch (error: any) {
     console.error("上传失败详情:", error);
@@ -1420,4 +1437,3 @@ async function processUpload(files: File[]) {
   text-align: center;
 }
 </style>
- 

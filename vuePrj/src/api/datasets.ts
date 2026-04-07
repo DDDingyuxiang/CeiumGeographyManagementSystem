@@ -19,11 +19,13 @@ export const deleteUserDataset = async (id: string | number) => {
 };
 
 export const uploadUserData = async (
+  authHeader: string,
   formData: FormData,
   onUploadProgress?: (progressEvent: any) => void,
 ) => {
   const response = await service.post(API_ENDPOINTS.users.uploadData, formData, {
     headers: {
+      Authorization: authHeader,
       "Content-Type": "multipart/form-data",
     },
     onUploadProgress,

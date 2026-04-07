@@ -21,64 +21,80 @@ export const dispatchTask = async (
   }
 };
 
-function findShapefilesRecursively(dir: string): string[] {
-  if (!fs.existsSync(dir)) {
-    return [];
+async function prepareWorkspaceShapefile(asset: any, workspace: string) {
+  const exists = await Gs_Client.client.workspaces.exists(workspace);
+  if (!exists) {
+    await Gs_Client.client.workspaces.create(workspace);
   }
 
-  const matches: string[] = [];
-  for (const name of fs.readdirSync(dir)) {
-    const fullPath = path.join(dir, name);
-    const stat = fs.statSync(fullPath);
-
-    if (stat.isDirectory()) {
-      matches.push(...findShapefilesRecursively(fullPath));
-      continue;
+  const findFirstShapefile = (dir: string, matcher?: (file: string) => boolean): string | null => {
+    if (!fs.existsSync(dir)) {
+      return null;
     }
 
-    if (name.toLowerCase().endsWith(".shp")) {
-      matches.push(fullPath);
+    for (const name of fs.readdirSync(dir)) {
+      const fullPath = path.join(dir, name);
+      const stat = fs.statSync(fullPath);
+
+      if (stat.isDirectory()) {
+        const nested = findFirstShapefile(fullPath, matcher);
+        if (nested) {
+          return nested;
+        }
+        continue;
+      }
+
+      if (name.toLowerCase().endsWith(".shp") && (!matcher || matcher(fullPath))) {
+        return fullPath;
+      }
     }
+
+    return null;
+  };
+
+  const extractedPath = typeof asset.extractedPath === "string" ? path.resolve(asset.extractedPath) : "";
+  const workspaceDir = path.join(process.cwd(), "geoserver_data", workspace);
+  const shapefile =
+    (extractedPath && findFirstShapefile(extractedPath)) ||
+    findFirstShapefile(workspaceDir, (file) => file.includes(asset._id.toString()));
+
+  if (!shapefile) {
+    throw new Error("The source SHP file could not be located for this asset.");
   }
 
-  return matches;
+  return shapefile;
 }
 
-function findAssetShapefile(asset: any) {
-  const extractedPath = typeof asset.extractedPath === "string" ? asset.extractedPath : "";
-  const extractedShpFiles = extractedPath
-    ? findShapefilesRecursively(path.resolve(extractedPath))
-    : [];
-
-  if (extractedShpFiles.length > 0) {
-    return extractedShpFiles[0]!;
+async function runBufferTool1004(asset: any, params: Record<string, unknown>, workspace: string) {
+  const radius = Number(params.radius);
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new Error("Buffer radius must be greater than 0.");
   }
 
-  const workspaceDir = path.join(
-    process.cwd(),
-    "geoserver_data",
-    Gs_Client.workspace || "user_data_space",
-  );
+  const inputPath = path.resolve(await prepareWorkspaceShapefile(asset, workspace));
+  const timestamp = Date.now();
+  const storeName = `buf_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(process.cwd(), "geoserver_data", "temp_analysis", storeName);
+  const outputBaseName = storeName;
+  const geoJsonPath = path.join(outDir, `${outputBaseName}.geojson`);
+  const shapefilePath = path.join(outDir, `${outputBaseName}.shp`);
 
-  const workspaceShpFiles = findShapefilesRecursively(workspaceDir).filter((file) =>
-    file.includes(asset._id.toString()),
-  );
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const pythonScript = path.join(__dirname, "python", "runBuffer.py");
 
-  if (workspaceShpFiles.length > 0) {
-    return workspaceShpFiles[0]!;
+  if (!fs.existsSync(pythonScript)) {
+    throw new Error(`Python脚本不存在: ${pythonScript}`);
   }
 
-  throw new Error("The source SHP file could not be located for this asset.");
-}
+  if (!fs.existsSync(inputPath)) {
+    throw new Error(`输入文件不存在: ${inputPath}`);
+  }
 
-function runPythonBuffer(
-  pythonScript: string,
-  inputPath: string,
-  outputGeoJsonPath: string,
-  radius: number,
-) {
-  return new Promise<void>((resolve, reject) => {
-    const command = `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${outputGeoJsonPath}" ${radius}`;
+  fs.mkdirSync(outDir, { recursive: true });
+
+  await new Promise<void>((resolve, reject) => {
+    const command = `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${geoJsonPath}" ${radius}`;
 
     exec(
       command,
@@ -106,66 +122,20 @@ function runPythonBuffer(
         }
 
         reject(
-          new Error(
-            `Python script did not report success.\nstdout: ${stdout}\nstderr: ${stderr}`,
-          ),
+          new Error(`Python script did not report success.\nstdout: ${stdout}\nstderr: ${stderr}`),
         );
       },
     );
   });
-}
-
-async function ensureWorkspace(workspace: string) {
-  const exists = await Gs_Client.client.workspaces.exists(workspace);
-  if (!exists) {
-    await Gs_Client.client.workspaces.create(workspace);
-  }
-}
-
-async function runBufferTool1004(
-  asset: any,
-  params: Record<string, unknown>,
-  workspace: string,
-) {
-  const radius = Number(params.radius);
-  if (!Number.isFinite(radius) || radius <= 0) {
-    throw new Error("Buffer radius must be greater than 0.");
-  }
-
-  const inputPath = path.resolve(findAssetShapefile(asset));
-  const timestamp = Date.now();
-  const storeName = `buf_${asset._id.toString().slice(-5)}_${timestamp}`;
-  const outDir = path.join(process.cwd(), "geoserver_data", "temp_analysis", storeName);
-  const outputBaseName = storeName;
-  const geoJsonPath = path.join(outDir, `${outputBaseName}.geojson`);
-  const shapefilePath = path.join(outDir, `${outputBaseName}.shp`);
-
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  const pythonScript = path.join(__dirname, "python", "runBuffer.py");
-
-  if (!fs.existsSync(pythonScript)) {
-    throw new Error(`Buffer script not found: ${pythonScript}`);
-  }
-
-  if (!fs.existsSync(inputPath)) {
-    throw new Error(`Input SHP file not found: ${inputPath}`);
-  }
-
-  if (!fs.existsSync(outDir)) {
-    fs.mkdirSync(outDir, { recursive: true });
-  }
-
-  await ensureWorkspace(workspace);
-  await runPythonBuffer(pythonScript, inputPath, geoJsonPath, radius);
 
   if (!fs.existsSync(geoJsonPath)) {
-    throw new Error(`Buffer GeoJSON was not generated: ${geoJsonPath}`);
+    throw new Error(`输出geojson文件不存在: ${geoJsonPath}`);
   }
 
   if (!fs.existsSync(shapefilePath)) {
-    throw new Error(`Buffer SHP was not generated: ${shapefilePath}`);
+    throw new Error(`输出shp文件不存在: ${shapefilePath}`);
   }
+
   await Gs_Client.client.datastores.create(workspace, {
     name: storeName,
     charset: "UTF-8",
