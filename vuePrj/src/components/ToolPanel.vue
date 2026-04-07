@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, markRaw } from 'vue';
+import type { WorkbenchLayerItem } from '@/views/Workbench.vue';
 
 // 1. 动态导入具体的工具组件（使用异步组件可以优化首屏加载）
 const BufferForm = defineAsyncComponent(() => import('./toolsWidget/BufferForm.vue'));
@@ -9,6 +10,7 @@ const CoordTransform = defineAsyncComponent(() => import('./toolsWidget/CoordTra
 
 const props = defineProps<{
   toolId: number | null;
+  loadedLayers: WorkbenchLayerItem[];
 }>();
 
 const emit = defineEmits(['close']);
@@ -38,7 +40,7 @@ const handleClose = () => {
         <div class="close-icon" @click="handleClose">×</div>
       </div>
       <div class="tool-panel-body">
-        <component :is="currentConfig.component" />
+        <component :is="currentConfig.component" :loaded-layers="loadedLayers" />
       </div>
     </div>
   </transition>

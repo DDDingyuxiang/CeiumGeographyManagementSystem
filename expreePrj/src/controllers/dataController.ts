@@ -11,6 +11,7 @@ const geoserverUrl = Gs_Client.baseUrl;
 const userWorkspace = "user_data_space";
 const extractedRoot = path.join(process.cwd(), "uploads", "extracted");
 const geoserverDataRoot = path.join(process.cwd(), "geoserver_data");
+const tempAnalysisRoot = path.join(geoserverDataRoot, "temp_analysis");
 
 const ensureDirectory = (targetPath: string) => {
   fs.mkdirSync(targetPath, { recursive: true });
@@ -265,6 +266,7 @@ export const publishData = async (req: Request, res: Response) => {
         storeName: commonName,
         layerName: commonName,
         resourceType: "coverage",
+        cleanupGroup: "workspace",
         wmsUrl: `${geoserverUrl}/wms`,
         layers: `${userWorkspace}:${commonName}`,
       });
@@ -334,6 +336,7 @@ export const publishData = async (req: Request, res: Response) => {
         storeName: mainResult.storeName,
         layerName: mainResult.layerName,
         resourceType: mainResult.resourceType,
+        cleanupGroup: "workspace",
         wmsUrl: `${geoserverUrl}/wms`,
         layers: mainResult.fullLayerName,
         layerType: "vector",
@@ -362,11 +365,10 @@ export const cleanupResources = async (req: Request, res: Response) => {
       if (item.resourceType === "datastore") {
         await gsClient.datastores.delete(workspace, item.storeName);
 
-        const localStoreDir = path.join(
-          geoserverDataRoot,
-          workspace,
-          item.storeName,
-        );
+        const localStoreDir =
+          item.cleanupGroup === "analysis"
+            ? path.join(tempAnalysisRoot, item.storeName)
+            : path.join(geoserverDataRoot, workspace, item.storeName);
         if (fs.existsSync(localStoreDir)) {
           fs.rmSync(localStoreDir, { recursive: true, force: true });
         }

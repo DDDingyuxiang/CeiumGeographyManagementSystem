@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import * as Cesium from "cesium";
-import axios from "axios";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { ElMessage } from "element-plus";
-
-interface LayerItem {
-  id: number | string;
-  label: string;
-  visible: boolean;
-  cesiumLayer: Cesium.ImageryLayer | null;
-  type: string;
-}
+import type { WorkbenchLayerItem as LayerItem } from "@/views/Workbench.vue";
+import {
+  fetchUserDatasets,
+  publishUserDataset,
+  sendDatasetCleanup,
+} from "@/api/datasets";
 
 interface UserDatasetItem {
   id: string;
@@ -24,34 +21,37 @@ interface CreatedResourceItem {
   storeName: string;
   layerName?: string;
   resourceType: string;
+  cleanupGroup?: string;
 }
 
 const props = defineProps<{
   viewer: Cesium.Viewer | null;
+  layers: LayerItem[];
 }>();
 
 const emit = defineEmits<{
   (event: "dragging-change", value: boolean): void;
+  (event: "update:layers", value: LayerItem[]): void;
 }>();
 
 const leftPanelActive = ref(false);
 const draggedItem = ref<UserDatasetItem | null>(null);
 const isDragging = ref(false);
 
-const layerData = ref<LayerItem[]>([
-  { id: 0, label: "基础图层", visible: true, cesiumLayer: null, type: "" },
-]);
-
 const userData = ref<UserDatasetItem[]>([]);
 const createdResources = ref<CreatedResourceItem[]>([]);
 
 const displayedLayers = computed(() => {
-  const base = layerData.value.filter((layer) => layer.id === 0);
-  const userLayers = layerData.value.filter((layer) => layer.id !== 0);
+  const base = props.layers.filter((layer) => layer.id === 0);
+  const userLayers = props.layers.filter((layer) => layer.id !== 0);
   return [...userLayers.reverse(), ...base];
 });
 
 const syncLayersToUI = () => {};
+
+const updateLayers = (layers: LayerItem[]) => {
+  emit("update:layers", layers);
+};
 
 const updateDraggingState = (value: boolean) => {
   isDragging.value = value;
@@ -68,10 +68,7 @@ const toggleLeftPanel = async () => {
   try {
     syncLayersToUI();
 
-    const token = localStorage.getItem("token");
-    const res = await axios.get("http://localhost:3000/api/users/datasets", {
-      headers: { Authorization: token },
-    });
+    const res = await fetchUserDatasets();
 
     if (res.data.code === 200) {
       userData.value = res.data.data.map((item: any) => ({
@@ -93,7 +90,7 @@ const toggleLeftPanel = async () => {
 };
 
 const toggleLayerVisibility = (data: LayerItem) => {
-  data.visible = !data.visible;
+  const nextVisible = !data.visible;
 
   if (!props.viewer) {
     return;
@@ -101,13 +98,16 @@ const toggleLayerVisibility = (data: LayerItem) => {
 
   if (data.id === 0) {
     const baseLayer = props.viewer.imageryLayers.get(0);
-    baseLayer.show = data.visible;
-    return;
+    baseLayer.show = nextVisible;
+  } else if (data.cesiumLayer) {
+    data.cesiumLayer.show = nextVisible;
   }
 
-  if (data.cesiumLayer) {
-    data.cesiumLayer.show = data.visible;
-  }
+  updateLayers(
+    props.layers.map((layer) =>
+      layer.id === data.id ? { ...layer, visible: nextVisible } : layer,
+    ),
+  );
 };
 
 const handleNodeContextMenu = (event: Event, data: LayerItem) => {
@@ -146,17 +146,10 @@ const handleDropOnMap = async () => {
   });
 
   try {
-    const token = localStorage.getItem("token");
-    const res = await axios.post(
-      "http://localhost:3000/api/users/datasets/publish",
-      {
-        filename: itemFilename || itemName,
-        assetId: itemId,
-      },
-      {
-        headers: { Authorization: token },
-      },
-    );
+    const res = await publishUserDataset({
+      filename: itemFilename || itemName,
+      assetId: itemId,
+    });
 
     if (res.data.code === 200) {
       const { storeName, layerName, resourceType, wmsUrl, layers, viewparams } = res.data;
@@ -179,15 +172,29 @@ const handleDropOnMap = async () => {
       const imageryLayer = props.viewer.imageryLayers.addImageryProvider(provider);
 
       if (storeName && resourceType) {
-        createdResources.value.push({ storeName, layerName, resourceType });
+        createdResources.value.push({
+          storeName,
+          layerName,
+          resourceType,
+          cleanupGroup: res.data.cleanupGroup,
+        });
       }
-      layerData.value.push({
-        id: itemId,
-        label: itemName,
-        visible: true,
-        cesiumLayer: imageryLayer,
-        type: itemType,
-      });
+      updateLayers([
+        ...props.layers,
+        {
+          id: itemId,
+          label: itemName,
+          visible: true,
+          cesiumLayer: imageryLayer,
+          type: itemType,
+          assetId: itemId,
+          wmsUrl,
+          layers,
+          storeName,
+          resourceType,
+          cleanupGroup: res.data.cleanupGroup,
+        },
+      ]);
 
       ElMessage.success(`数据加载成功：${itemName}`);
     }
@@ -212,7 +219,7 @@ const handleLayerDrop = () => {
   if (!props.viewer) return;
 
   const providerCache = new Map<LayerItem["id"], Cesium.ImageryProvider>();
-  layerData.value.forEach((item) => {
+  props.layers.forEach((item) => {
     if (item.id !== 0 && item.cesiumLayer) {
       providerCache.set(item.id, item.cesiumLayer.imageryProvider);
     }
@@ -220,10 +227,11 @@ const handleLayerDrop = () => {
 
   const newUiOrder = displayedLayers.value.filter((item) => item.id !== 0);
 
-  layerData.value = [
-    ...layerData.value.filter((item) => item.id === 0),
+  const nextLayers = [
+    ...props.layers.filter((item) => item.id === 0),
     ...[...newUiOrder].reverse(),
   ];
+  updateLayers(nextLayers);
 
   const imageryLayers = props.viewer.imageryLayers;
   while (imageryLayers.length > 1) {
@@ -242,7 +250,7 @@ const handleLayerDrop = () => {
       const newLayer = imageryLayers.addImageryProvider(provider);
       newLayer.show = item.visible;
 
-      const target = layerData.value.find((layer) => layer.id === item.id);
+      const target = nextLayers.find((layer) => layer.id === item.id);
       if (target) {
         target.cesiumLayer = newLayer;
       }
@@ -253,25 +261,31 @@ const handleLayerDrop = () => {
 };
 
 const handleCleanup = () => {
-  if (createdResources.value.length === 0) return;
+  const layerResources = props.layers
+    .filter((layer) => layer.storeName && layer.resourceType)
+    .map((layer) => ({
+      storeName: layer.storeName!,
+      layerName: layer.label,
+      resourceType: layer.resourceType!,
+      cleanupGroup: layer.cleanupGroup,
+    }));
 
-  const url = "http://localhost:3000/api/users/datasets/cleanup";
-  const data = JSON.stringify({
+  const uniqueResources = [...createdResources.value, ...layerResources].filter(
+    (item, index, list) =>
+      list.findIndex(
+        (candidate) =>
+          candidate.storeName === item.storeName &&
+          candidate.resourceType === item.resourceType &&
+          candidate.cleanupGroup === item.cleanupGroup,
+      ) === index,
+  );
+
+  if (uniqueResources.length === 0) return;
+
+  sendDatasetCleanup({
     workspace: "user_data_space",
-    resources: createdResources.value,
+    resources: uniqueResources,
   });
-
-  if (navigator.sendBeacon) {
-    const blob = new Blob([data], { type: "application/json" });
-    navigator.sendBeacon(url, blob);
-  } else {
-    fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: data,
-      keepalive: true,
-    });
-  }
 
   createdResources.value = [];
 };

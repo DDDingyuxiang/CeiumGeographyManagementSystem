@@ -220,8 +220,8 @@
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import axios from 'axios'
 import router from '@/router'
+import { login, register } from '@/api/auth'
 
 // ==================== 状态 ====================
 const isRegister = ref(false)
@@ -324,13 +324,13 @@ async function submitLogin() {
     loading.value = true;
     
     try {
-      const res = await axios.post('http://localhost:3000/api/auth/login', {
+      const res = await login({
         account: loginForm.account,
         password: loginForm.password,
       });
 
-      if (res.data.code === 200) {
-        const { token, user } = res.data.data;
+      if (res.status === 201 || res.code === 200) {
+        const { token, user } = res.data;
 
         // --- 核心：持久化存储 ---
         localStorage.setItem('token', token);
@@ -368,10 +368,10 @@ async function submitRegister() {
       }
 
       // 发送请求
-      const res = await axios.post('http://localhost:3000/api/auth/register', formData);
+      const res = await register(formData);
 
       // --- 成功提醒 ---
-      if (res.status === 201 || res.data.code === 200) {
+      if (res.code === 200) {
         ElMessage({
           message: '✨ 账号创建成功！欢迎加入地理信息管理平台',
           type: 'success',
