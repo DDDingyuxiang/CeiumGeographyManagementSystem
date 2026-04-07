@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { CollapseModelValue } from "element-plus";
+import type { WorkbenchLayerItem } from "@/views/Workbench.vue";
+
+defineProps<{
+  loadedLayers: WorkbenchLayerItem[];
+}>();
 
 const emit = defineEmits<{
   (event: "execute-tool", toolId: number): void;

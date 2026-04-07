@@ -11,58 +11,74 @@ export const dispatchTask = async (
   asset: any,
   params: Record<string, unknown>,
 ) => {
-  const workspace = "user_data_space";
-  const tempDir = path.join(
-    process.cwd(),
-    "geoserver_data",
-    "temp_analysis",
-    asset._id.toString(),
-  );
-
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
+  const workspace = Gs_Client.workspace || "user_data_space";
 
   switch (toolId) {
     case 10004:
-      return runBufferTool1004(asset, params, tempDir, workspace);
+      return runBufferTool1004(asset, params, workspace);
     default:
-      throw new Error(`不支持的 toolId: ${toolId}`);
+      throw new Error(`Unsupported toolId: ${toolId}`);
   }
 };
 
-function findAssetShapefile(assetId: string) {
-  const assetDir = path.join(
+function findShapefilesRecursively(dir: string): string[] {
+  if (!fs.existsSync(dir)) {
+    return [];
+  }
+
+  const matches: string[] = [];
+  for (const name of fs.readdirSync(dir)) {
+    const fullPath = path.join(dir, name);
+    const stat = fs.statSync(fullPath);
+
+    if (stat.isDirectory()) {
+      matches.push(...findShapefilesRecursively(fullPath));
+      continue;
+    }
+
+    if (name.toLowerCase().endsWith(".shp")) {
+      matches.push(fullPath);
+    }
+  }
+
+  return matches;
+}
+
+function findAssetShapefile(asset: any) {
+  const extractedPath = typeof asset.extractedPath === "string" ? asset.extractedPath : "";
+  const extractedShpFiles = extractedPath
+    ? findShapefilesRecursively(path.resolve(extractedPath))
+    : [];
+
+  if (extractedShpFiles.length > 0) {
+    return extractedShpFiles[0]!;
+  }
+
+  const workspaceDir = path.join(
     process.cwd(),
     "geoserver_data",
-    "user_data_space",
-    assetId,
+    Gs_Client.workspace || "user_data_space",
   );
 
-  if (!fs.existsSync(assetDir)) {
-    throw new Error("未找到已发布的矢量数据目录，请先将数据拖入地图完成发布");
+  const workspaceShpFiles = findShapefilesRecursively(workspaceDir).filter((file) =>
+    file.includes(asset._id.toString()),
+  );
+
+  if (workspaceShpFiles.length > 0) {
+    return workspaceShpFiles[0]!;
   }
 
-  const shpFiles = fs
-    .readdirSync(assetDir)
-    .filter((file) => file.toLowerCase().endsWith(".shp"));
-
-  if (shpFiles.length === 0) {
-    throw new Error("当前缓冲区分析仅支持已发布的 SHP 矢量图层");
-  }
-
-  return path.join(assetDir, shpFiles[0]!);
+  throw new Error("The source SHP file could not be located for this asset.");
 }
 
 function runPythonBuffer(
   pythonScript: string,
   inputPath: string,
-  outputPath: string,
+  outputGeoJsonPath: string,
   radius: number,
 ) {
   return new Promise<void>((resolve, reject) => {
-    const command = `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${outputPath}" ${radius}`;
-    console.log("执行缓冲区命令:", command);
+    const command = `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${outputGeoJsonPath}" ${radius}`;
 
     exec(
       command,
@@ -75,11 +91,6 @@ function runPythonBuffer(
         timeout: 300000,
       },
       (error, stdout, stderr) => {
-        console.log("Python stdout:", stdout);
-        if (stderr) {
-          console.warn("Python stderr:", stderr);
-        }
-
         if (stdout.includes("PYTHON_SUCCESS")) {
           resolve();
           return;
@@ -88,72 +99,89 @@ function runPythonBuffer(
         if (error) {
           reject(
             new Error(
-              `Python 执行失败: ${error.message}\nstdout: ${stdout}\nstderr: ${stderr}`,
+              `Python execution failed: ${error.message}\nstdout: ${stdout}\nstderr: ${stderr}`,
             ),
           );
           return;
         }
 
         reject(
-          new Error(`Python 脚本未报告成功标记\nstdout: ${stdout}\nstderr: ${stderr}`),
+          new Error(
+            `Python script did not report success.\nstdout: ${stdout}\nstderr: ${stderr}`,
+          ),
         );
       },
     );
   });
 }
 
+async function ensureWorkspace(workspace: string) {
+  const exists = await Gs_Client.client.workspaces.exists(workspace);
+  if (!exists) {
+    await Gs_Client.client.workspaces.create(workspace);
+  }
+}
+
 async function runBufferTool1004(
   asset: any,
   params: Record<string, unknown>,
-  outDir: string,
   workspace: string,
 ) {
   const radius = Number(params.radius);
   if (!Number.isFinite(radius) || radius <= 0) {
-    throw new Error("缓冲区距离必须是大于 0 的数字");
+    throw new Error("Buffer radius must be greater than 0.");
   }
 
-  const inputPath = path.resolve(findAssetShapefile(asset._id.toString()));
+  const inputPath = path.resolve(findAssetShapefile(asset));
   const timestamp = Date.now();
-  const outputBaseName = `buffer_${asset._id.toString().slice(-6)}_${timestamp}`;
-  const outputPath = path.join(outDir, `${outputBaseName}.shp`);
+  const storeName = `buf_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(process.cwd(), "geoserver_data", "temp_analysis", storeName);
+  const outputBaseName = storeName;
+  const geoJsonPath = path.join(outDir, `${outputBaseName}.geojson`);
+  const shapefilePath = path.join(outDir, `${outputBaseName}.shp`);
 
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   const pythonScript = path.join(__dirname, "python", "runBuffer.py");
 
   if (!fs.existsSync(pythonScript)) {
-    throw new Error(`未找到缓冲区脚本: ${pythonScript}`);
+    throw new Error(`Buffer script not found: ${pythonScript}`);
   }
 
   if (!fs.existsSync(inputPath)) {
-    throw new Error(`未找到输入 SHP 文件: ${inputPath}`);
+    throw new Error(`Input SHP file not found: ${inputPath}`);
   }
 
-  await runPythonBuffer(pythonScript, inputPath, outputPath, radius);
-
-  if (!fs.existsSync(outputPath)) {
-    throw new Error(`缓冲区结果未生成: ${outputPath}`);
+  if (!fs.existsSync(outDir)) {
+    fs.mkdirSync(outDir, { recursive: true });
   }
 
-  const storeName = `buf_${asset._id.toString().slice(-5)}_${timestamp}`;
+  await ensureWorkspace(workspace);
+  await runPythonBuffer(pythonScript, inputPath, geoJsonPath, radius);
 
+  if (!fs.existsSync(geoJsonPath)) {
+    throw new Error(`Buffer GeoJSON was not generated: ${geoJsonPath}`);
+  }
+
+  if (!fs.existsSync(shapefilePath)) {
+    throw new Error(`Buffer SHP was not generated: ${shapefilePath}`);
+  }
   await Gs_Client.client.datastores.create(workspace, {
     name: storeName,
     charset: "UTF-8",
-    url: `file://${outputPath.replace(/\\/g, "/")}`,
+    url: `file://${shapefilePath.replace(/\\/g, "/")}`,
   });
 
-  await Gs_Client.client.datastores.publish(
-    workspace,
-    storeName,
-    outputBaseName,
-  );
+  await Gs_Client.client.datastores.publish(workspace, storeName, outputBaseName);
 
   return {
-    layerName: `缓冲区 ${radius}m`,
+    layerName: `buffer_${radius}m`,
     wmsUrl: `${Gs_Client.baseUrl}/wms`,
     layers: `${workspace}:${outputBaseName}`,
+    geoJsonPath,
     tempStoreName: storeName,
+    storeName,
+    resourceType: "datastore",
+    cleanupGroup: "analysis",
   };
 }

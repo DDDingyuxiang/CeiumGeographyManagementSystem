@@ -1,11 +1,28 @@
 <script setup lang="ts">
 import * as Cesium from "cesium";
 import "../Widgets/widgets.css";
-import { onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import ToolPanel from "@/components/ToolPanel.vue";
 import WorkbenchLeftTray from "@/components/workbench/WorkbenchLeftTray.vue";
 import WorkbenchRightTray from "@/components/workbench/WorkbenchRightTray.vue";
+import emitter, { type AnalysisLayerPayload } from "@/utils/bus";
+
+export interface WorkbenchLayerItem {
+  id: number | string;
+  label: string;
+  visible: boolean;
+  cesiumLayer: Cesium.ImageryLayer | null;
+  type: string;
+  assetId?: string;
+  wmsUrl?: string;
+  layers?: string;
+  storeName?: string;
+  resourceType?: string;
+  cleanupGroup?: string;
+  geoJsonPath?: string;
+  sourceAssetId?: string;
+}
 
 declare global {
   interface Window {
@@ -20,8 +37,46 @@ const router = useRouter();
 const isDragging = ref(false);
 const activeToolId = ref<number | null>(null);
 const leftTrayRef = ref<{ handleDropOnMap: () => Promise<void> } | null>(null);
+const loadedLayers = ref<WorkbenchLayerItem[]>([
+  { id: 0, label: "基础图层", visible: true, cesiumLayer: null, type: "" },
+]);
 
 let viewer: Cesium.Viewer | null = null;
+
+const addWmsLayer = (payload: AnalysisLayerPayload) => {
+  if (!viewer) {
+    return;
+  }
+
+  const provider = new Cesium.WebMapServiceImageryProvider({
+    url: payload.wmsUrl,
+    layers: payload.layers,
+    parameters: {
+      service: "WMS",
+      format: "image/png",
+      transparent: true,
+    },
+  });
+
+  const imageryLayer = viewer.imageryLayers.addImageryProvider(provider);
+  loadedLayers.value = [
+    ...loadedLayers.value,
+    {
+      id: payload.id,
+      label: payload.label,
+      visible: payload.visible,
+      cesiumLayer: imageryLayer,
+      type: payload.type,
+      wmsUrl: payload.wmsUrl,
+      layers: payload.layers,
+      storeName: payload.storeName,
+      resourceType: payload.resourceType,
+      cleanupGroup: payload.cleanupGroup,
+      geoJsonPath: payload.geoJsonPath,
+      sourceAssetId: payload.sourceAssetId,
+    },
+  ];
+};
 
 onMounted(() => {
   viewer = new Cesium.Viewer("cesiumContainer", {
@@ -56,6 +111,12 @@ onMounted(() => {
   viewer.screenSpaceEventHandler.setInputAction(() => {
     if (viewer) viewer.selectedEntity = undefined;
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  emitter.on("add-analysis-layer", addWmsLayer);
+});
+
+onBeforeUnmount(() => {
+  emitter.off("add-analysis-layer", addWmsLayer);
 });
 
 const handleUserCommand = (command: string) => {
@@ -153,7 +214,9 @@ const executeTool = (toolId: number) => {
         <WorkbenchLeftTray
           ref="leftTrayRef"
           :viewer="viewer"
+          :layers="loadedLayers"
           @dragging-change="isDragging = $event"
+          @update:layers="loadedLayers = $event"
         />
 
         <div class="map-container" @dragenter.prevent @dragover.prevent @drop="handleDropOnMap">
@@ -171,8 +234,15 @@ const executeTool = (toolId: number) => {
           </div>
         </div>
 
-        <WorkbenchRightTray @execute-tool="executeTool" />
-        <ToolPanel :tool-id="activeToolId" @close="activeToolId = null" />
+        <WorkbenchRightTray
+          :loaded-layers="loadedLayers"
+          @execute-tool="executeTool"
+        />
+        <ToolPanel
+          :tool-id="activeToolId"
+          :loaded-layers="loadedLayers"
+          @close="activeToolId = null"
+        />
       </main>
     </div>
   </div>
