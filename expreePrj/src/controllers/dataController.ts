@@ -36,6 +36,7 @@ const getAssetIdentifier = (asset: IDataAsset) => {
   return assetIdentifier;
 };
 
+
 const findShpFiles = (dir: string): string[] => {
   const results: string[] = [];
 
@@ -377,6 +378,13 @@ export const cleanupResources = async (req: Request, res: Response) => {
 
       if (item.resourceType === "coverage") {
         await gsClient.coveragestores.delete(workspace, item.storeName);
+        if (item.cleanupGroup === "analysis") {
+          const localStoreDir = path.join(tempAnalysisRoot, item.storeName);
+          if (fs.existsSync(localStoreDir)) {
+            fs.rmSync(localStoreDir, { recursive: true, force: true });
+          }
+        }
+        continue;
       }
     } catch (e: any) {
       console.error("--- GeoServer 清理详情 ---");

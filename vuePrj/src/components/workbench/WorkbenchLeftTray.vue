@@ -47,8 +47,6 @@ const displayedLayers = computed(() => {
   return [...userLayers.reverse(), ...base];
 });
 
-const syncLayersToUI = () => {};
-
 const updateLayers = (layers: LayerItem[]) => {
   emit("update:layers", layers);
 };
@@ -66,10 +64,7 @@ const toggleLeftPanel = async () => {
   }
 
   try {
-    syncLayersToUI();
-
     const res = await fetchUserDatasets();
-
     if (res.code === 200) {
       userData.value = res.data.map((item: any) => ({
         id: item._id,
@@ -153,6 +148,20 @@ const handleDropOnMap = async () => {
 
     if (res.code === 200) {
       const { storeName, layerName, resourceType, wmsUrl, layers, viewparams } = res;
+
+      if (storeName && resourceType) {
+        createdResources.value.push({
+          storeName,
+          layerName,
+          resourceType,
+          cleanupGroup: res.cleanupGroup,
+        });
+      }
+
+      if (!wmsUrl || !layers) {
+        throw new Error("发布结果缺少 WMS 图层信息");
+      }
+
       const parameters: Record<string, unknown> = {
         service: "WMS",
         format: "image/png",
@@ -171,14 +180,6 @@ const handleDropOnMap = async () => {
 
       const imageryLayer = props.viewer.imageryLayers.addImageryProvider(provider);
 
-      if (storeName && resourceType) {
-        createdResources.value.push({
-          storeName,
-          layerName,
-          resourceType,
-          cleanupGroup: res.cleanupGroup,
-        });
-      }
       updateLayers([
         ...props.layers,
         {
@@ -199,7 +200,9 @@ const handleDropOnMap = async () => {
       ElMessage.success(`数据加载成功：${itemName}`);
     }
   } catch (err: any) {
-    ElMessage.error(`数据发布失败：${err.response?.data?.message || "未知错误"}`);
+    ElMessage.error(
+      `数据发布失败：${err.response?.data?.message || err?.message || "未知错误"}`,
+    );
   } finally {
     loading.close();
     draggedItem.value = null;
@@ -226,7 +229,6 @@ const handleLayerDrop = () => {
   });
 
   const newUiOrder = displayedLayers.value.filter((item) => item.id !== 0);
-
   const nextLayers = [
     ...props.layers.filter((item) => item.id === 0),
     ...[...newUiOrder].reverse(),
@@ -245,15 +247,16 @@ const handleLayerDrop = () => {
     }
 
     const provider = providerCache.get(item.id);
+    if (!provider) {
+      continue;
+    }
 
-    if (provider) {
-      const newLayer = imageryLayers.addImageryProvider(provider);
-      newLayer.show = item.visible;
+    const newLayer = imageryLayers.addImageryProvider(provider);
+    newLayer.show = item.visible;
 
-      const target = nextLayers.find((layer) => layer.id === item.id);
-      if (target) {
-        target.cesiumLayer = newLayer;
-      }
+    const target = nextLayers.find((layer) => layer.id === item.id);
+    if (target) {
+      target.cesiumLayer = newLayer;
     }
   }
 

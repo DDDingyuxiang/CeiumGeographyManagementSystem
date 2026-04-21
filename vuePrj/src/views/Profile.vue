@@ -155,6 +155,33 @@
               class="storage-progress"
             />
           </div>
+
+          <el-divider class="panel-divider" />
+
+          <el-button class="edit-profile-btn" @click="openEditDialog">
+            <template #icon>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                class="btn-svg"
+              >
+                <path d="M12 20h9" />
+                <path
+                  d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"
+                />
+              </svg>
+            </template>
+            修改资料
+          </el-button>
+          <input
+            ref="avatarInputRef"
+            type="file"
+            accept="image/*"
+            style="display: none"
+            @change="handleAvatarChange"
+          />
         </aside>
 
         <!-- 右侧数据管理 -->
@@ -454,6 +481,66 @@
         >
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="showEditDialog"
+      title="修改资料"
+      width="460px"
+      class="edit-dialog"
+      align-center
+    >
+      <el-form label-position="top" class="edit-form">
+        <div class="edit-avatar-row">
+          <el-avatar :size="72" :src="editPreviewAvatar" class="edit-user-avatar">
+            {{ profileForm.name?.charAt(0)?.toUpperCase() }}
+          </el-avatar>
+          <div class="edit-avatar-actions">
+            <el-button class="avatar-select-btn" @click="triggerAvatarSelect">
+              更换头像
+            </el-button>
+            <span class="edit-tip">支持 jpg、png 等常见图片格式</span>
+          </div>
+        </div>
+
+        <el-form-item label="昵称">
+          <el-input v-model="profileForm.name" placeholder="请输入昵称" />
+        </el-form-item>
+
+        <el-form-item label="当前密码">
+          <el-input
+            v-model="profileForm.currentPassword"
+            type="password"
+            show-password
+            placeholder="不修改密码可留空"
+          />
+        </el-form-item>
+
+        <el-form-item label="新密码">
+          <el-input
+            v-model="profileForm.newPassword"
+            type="password"
+            show-password
+            placeholder="至少 6 位"
+          />
+        </el-form-item>
+
+        <el-form-item label="确认新密码">
+          <el-input
+            v-model="profileForm.confirmPassword"
+            type="password"
+            show-password
+            placeholder="再次输入新密码"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showEditDialog = false">取消</el-button>
+        <el-button type="primary" :loading="isSavingProfile" @click="saveProfile">
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -462,21 +549,24 @@ import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { fetchUserDatasets } from "@/api/datasets";
-import { fetchUserProfile } from "@/api/users";
+import { fetchUserProfile, updateUserProfile } from "@/api/users";
 import { uploadUserData } from "@/api/datasets";
-
+import { buildBackendUrl, BASE_URL } from "@/api/request";
 import axios from "axios";
-import { log } from "console";
 
 const router = useRouter();
 const fileInputRef = ref<HTMLInputElement>();
+const avatarInputRef = ref<HTMLInputElement>();
 const showLogoutDialog = ref(false);
+const showEditDialog = ref(false);
 const activeFilter = ref("all");
 const loading = ref(true);
 const showShpCheckDialog = ref(false);
 const pendingShpFile = ref<File | null>(null);
 const selectedFiles = ref<File[]>([]);
 const isUploading = ref(false);
+const isSavingProfile = ref(false);
+const selectedAvatarFile = ref<File | null>(null);
 
 // ==================== 用户信息 ====================
 const userInfo = ref({
@@ -506,6 +596,38 @@ interface DataItem {
 }
 
 const dataList = ref<DataItem[]>([]);
+const profileForm = ref({
+  name: "",
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+});
+
+const editPreviewAvatar = computed(() =>
+  selectedAvatarFile.value
+    ? URL.createObjectURL(selectedAvatarFile.value)
+    : userInfo.value.avatar,
+);
+
+function applyProfileData(data: any) {
+  userInfo.value.name = data.name;
+  userInfo.value.email = data.account;
+  userInfo.value.avatar = data.avatar ? buildBackendUrl(data.avatar) : "";
+  userInfo.value.role =
+    data.role === "admin" ? "管理员" : data.role === "user" ? "普通用户" : data.role;
+  userInfo.value.createdAt = new Date(data.createdAt).toLocaleDateString();
+}
+
+function resetProfileForm() {
+  profileForm.value.name = userInfo.value.name;
+  profileForm.value.currentPassword = "";
+  profileForm.value.newPassword = "";
+  profileForm.value.confirmPassword = "";
+  selectedAvatarFile.value = null;
+  if (avatarInputRef.value) {
+    avatarInputRef.value.value = "";
+  }
+}
 
 onMounted(async () => {
   const token = localStorage.getItem("token");
@@ -521,20 +643,9 @@ onMounted(async () => {
     const res = await fetchUserProfile();
 
     if (res.code === 200) {
-      const d = res.data;
-      // 填充数据
-      userInfo.value.name = d.name;
-      userInfo.value.email = d.account;
-      // 注意：拼接后端地址
-      userInfo.value.avatar = d.avatar
-        ? `http://localhost:3000${d.avatar}`
-        : "";
-      userInfo.value.role = d.role;
-      // 格式化日期：2023-10-27
-      userInfo.value.createdAt = new Date(d.createdAt).toLocaleDateString();
+      applyProfileData(res.data);
+      resetProfileForm();
       await fetchDataList();
-      // 后续如果有关联查询，这里可以处理 dataList
-      // dataList.value = d.dataAssets || []
     }
   } catch (error: any) {
     if (error.response?.status === 401) {
@@ -574,12 +685,9 @@ async function removeData(row: DataItem) {
 
     const token = localStorage.getItem("token");
     // 注意：将 'delete-data' 改为 'datasets' 以匹配后端路由
-    const res = await axios.delete(
-      `http://localhost:3000/api/users/datasets/${row.id}`,
-      {
-        headers: { Authorization: token },
-      },
-    );
+    const res = await axios.delete(`${BASE_URL}/users/datasets/${row.id}`, {
+      headers: { Authorization: token },
+    });
 
     if (res.data.code === 200) {
       ElMessage.success(`已删除：${row.name}`);
@@ -594,6 +702,81 @@ async function removeData(row: DataItem) {
 // ==================== 操作：添加（本地文件） ====================
 function triggerFileAdd() {
   fileInputRef.value?.click();
+}
+
+function openEditDialog() {
+  resetProfileForm();
+  showEditDialog.value = true;
+}
+
+function triggerAvatarSelect() {
+  avatarInputRef.value?.click();
+}
+
+function handleAvatarChange(e: Event) {
+  const files = (e.target as HTMLInputElement).files;
+  if (!files?.length) return;
+  selectedAvatarFile.value = files[0] || null;
+}
+
+async function saveProfile() {
+  const trimmedName = profileForm.value.name.trim();
+  if (!trimmedName) {
+    ElMessage.warning("请输入昵称");
+    return;
+  }
+
+  const wantsPasswordUpdate = Boolean(
+    profileForm.value.currentPassword ||
+      profileForm.value.newPassword ||
+      profileForm.value.confirmPassword,
+  );
+
+  if (wantsPasswordUpdate) {
+    if (!profileForm.value.currentPassword) {
+      ElMessage.warning("请输入当前密码");
+      return;
+    }
+    if (profileForm.value.newPassword.length < 6) {
+      ElMessage.warning("新密码至少 6 位");
+      return;
+    }
+    if (profileForm.value.newPassword !== profileForm.value.confirmPassword) {
+      ElMessage.warning("两次输入的新密码不一致");
+      return;
+    }
+  }
+
+  const formData = new FormData();
+  formData.append("name", trimmedName);
+
+  if (selectedAvatarFile.value) {
+    formData.append("avatar", selectedAvatarFile.value);
+  }
+
+  if (wantsPasswordUpdate) {
+    formData.append("currentPassword", profileForm.value.currentPassword);
+    formData.append("newPassword", profileForm.value.newPassword);
+    formData.append("confirmPassword", profileForm.value.confirmPassword);
+  }
+
+  try {
+    isSavingProfile.value = true;
+    const res = await updateUserProfile(formData);
+
+    if (res.code === 200) {
+      applyProfileData(res.data);
+      resetProfileForm();
+      showEditDialog.value = false;
+      ElMessage.success("个人信息已更新");
+    } else {
+      ElMessage.error(res.message || "更新失败");
+    }
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || "更新失败");
+  } finally {
+    isSavingProfile.value = false;
+  }
 }
 
 const handleFileAdd = async (e: Event) => {
@@ -664,10 +847,6 @@ async function fetchDataList() {
 // ==================== 导航 ====================
 function goWorkbench() {
   router.push("/workbench");
-}
-
-function handleLogout() {
-  showLogoutDialog.value = true;
 }
 
 function confirmLogout() {
@@ -1127,6 +1306,21 @@ async function processUpload(files: File[]) {
   border-radius: 4px !important;
 }
 
+.edit-profile-btn {
+  width: 100%;
+  font-family: "Noto Serif SC", serif !important;
+  font-size: 13px !important;
+  border-radius: 8px !important;
+  height: 36px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+.edit-profile-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+}
+
 /* ===== 数据面板 ===== */
 .data-panel {
   background: rgba(255, 255, 255, 0.03);
@@ -1296,7 +1490,16 @@ async function processUpload(files: File[]) {
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 16px !important;
 }
+.edit-dialog :deep(.el-dialog) {
+  background: #111827 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+}
 .logout-dialog :deep(.el-dialog__title) {
+  color: #f1f5f9 !important;
+  font-family: "Noto Serif SC", serif !important;
+}
+.edit-dialog :deep(.el-dialog__title) {
   color: #f1f5f9 !important;
   font-family: "Noto Serif SC", serif !important;
 }
@@ -1304,7 +1507,14 @@ async function processUpload(files: File[]) {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
   padding: 20px 24px 16px !important;
 }
+.edit-dialog :deep(.el-dialog__header) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  padding: 20px 24px 16px !important;
+}
 .logout-dialog :deep(.el-dialog__footer) {
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+.edit-dialog :deep(.el-dialog__footer) {
   border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
 
@@ -1332,6 +1542,43 @@ async function processUpload(files: File[]) {
 .logout-icon svg {
   width: 24px;
   height: 24px;
+}
+
+.edit-form :deep(.el-form-item__label) {
+  color: #cbd5e1 !important;
+  font-family: "Noto Serif SC", serif !important;
+}
+.edit-form :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.04) !important;
+  box-shadow: none !important;
+}
+.edit-form :deep(.el-input__inner) {
+  color: #e2e8f0 !important;
+}
+.edit-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.edit-user-avatar {
+  background: #1e293b !important;
+  color: #60a5fa !important;
+}
+.edit-avatar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.avatar-select-btn {
+  width: fit-content;
+  background: rgba(37, 99, 235, 0.16) !important;
+  border-color: rgba(37, 99, 235, 0.26) !important;
+  color: #93c5fd !important;
+}
+.edit-tip {
+  font-size: 12px;
+  color: #64748b;
 }
 /* 添加到原有 style 末尾 */
 .shp-check-body {

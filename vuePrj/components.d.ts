@@ -49,6 +49,7 @@ declare module 'vue' {
     ElTimePicker: typeof import('element-plus/es')['ElTimePicker']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElTree: typeof import('element-plus/es')['ElTree']
+    HillshadeForm: typeof import('./src/components/toolsWidget/HillshadeForm.vue')['default']
     LayerList: typeof import('./src/components/LayerManager/LayerList.vue')['default']
     MeasureParams: typeof import('./src/components/toolsWidget/MeasureParams.vue')['default']
     ModalContainer: typeof import('./src/components/ToolModal/ModalContainer.vue')['default']

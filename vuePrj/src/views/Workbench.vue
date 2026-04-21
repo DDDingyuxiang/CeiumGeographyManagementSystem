@@ -38,7 +38,13 @@ const isDragging = ref(false);
 const activeToolId = ref<number | null>(null);
 const leftTrayRef = ref<{ handleDropOnMap: () => Promise<void> } | null>(null);
 const loadedLayers = ref<WorkbenchLayerItem[]>([
-  { id: 0, label: "基础图层", visible: true, cesiumLayer: null, type: "" },
+  {
+    id: 0,
+    label: "基础图层",
+    visible: true,
+    cesiumLayer: null,
+    type: "imagery",
+  },
 ]);
 
 let viewer: Cesium.Viewer | null = null;

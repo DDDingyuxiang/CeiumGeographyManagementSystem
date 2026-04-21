@@ -8,6 +8,22 @@ export interface CleanupResourceItem {
   cleanupGroup?: string;
 }
 
+export interface PublishDatasetResponse {
+  code: number;
+  message: string;
+  storeName?: string;
+  layerName?: string;
+  resourceType: string;
+  cleanupGroup?: string;
+  wmsUrl?: string;
+  layers?: string;
+  viewparams?: string;
+  terrainUrl?: string;
+  bounds?: [number, number, number, number];
+  minzoom?: number;
+  maxzoom?: number;
+}
+
 export const fetchUserDatasets = async () => {
   const response = await service.get(API_ENDPOINTS.users.datasets);
   return response.data;
@@ -33,7 +49,9 @@ export const uploadUserData = async (
   return response.data;
 };
 
-export const publishUserDataset = async (payload: { filename: string; assetId: string }) => {
+export const publishUserDataset = async (
+  payload: { filename: string; assetId: string },
+): Promise<PublishDatasetResponse> => {
   const response = await service.post(API_ENDPOINTS.users.publishDataset, payload);
   return response.data;
 };

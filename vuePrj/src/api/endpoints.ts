@@ -8,6 +8,7 @@ export const API_ENDPOINTS = {
   },
   users: {
     profile: "/users/profile",
+    updateProfile: "/users/profile",
     uploadData: "/users/upload-data",
     datasets: "/users/datasets",
     datasetById: (id: string | number) => `/users/datasets/${id}`,

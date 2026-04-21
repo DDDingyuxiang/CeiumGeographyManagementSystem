@@ -4,6 +4,7 @@ import cors from "cors";
 import path from "path";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import { ServerResponse } from "http";
 import userRoutes from "./routes/userRoutes.js";
 import analysisRoutes from "./routes/analysisRoutes.js";
 import { startExtractedFilesCleanupJob } from "./jobs/cleanupExtractedFiles.js";
@@ -13,17 +14,26 @@ dotenv.config();
 const app: express.Express = express();
 const port = process.env.PORT || 3000;
 
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
 app.use(
   cors({
     origin: "http://localhost:5173",
     credentials: true,
-    methods: ["GET", "POST", "DELETE"],
+    methods: ["GET", "POST", "DELETE", "PUT"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 app.options("/api/datasets/cleanup", cors());
+
+app.use(
+  "/uploads",
+  express.static(path.join(process.cwd(), "uploads"), {
+    setHeaders: (res: ServerResponse) => {
+      res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+      res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    },
+  }),
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
