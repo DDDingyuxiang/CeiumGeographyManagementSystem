@@ -15,6 +15,8 @@ export interface AnalysisResponse {
     wmsUrl: string;
     layers: string;
     geoJsonPath?: string;
+    geoJsonUrl?: string;
+    bounds?: [number, number, number, number];
     tempStoreName?: string;
     storeName?: string;
     resourceType?: string;

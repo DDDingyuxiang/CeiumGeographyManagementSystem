@@ -21,6 +21,7 @@ export interface WorkbenchLayerItem {
   resourceType?: string;
   cleanupGroup?: string;
   geoJsonPath?: string;
+  bounds?: [number, number, number, number];
   sourceAssetId?: string;
 }
 
@@ -49,22 +50,55 @@ const loadedLayers = ref<WorkbenchLayerItem[]>([
 
 let viewer: Cesium.Viewer | null = null;
 
-const addWmsLayer = (payload: AnalysisLayerPayload) => {
+const buildContourSld = (layerName: string) => `
+<StyledLayerDescriptor version="1.0.0"
+  xsi:schemaLocation="http://www.opengis.net/sld StyledLayerDescriptor.xsd"
+  xmlns="http://www.opengis.net/sld"
+  xmlns:ogc="http://www.opengis.net/ogc"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <NamedLayer>
+    <Name>${layerName}</Name>
+    <UserStyle>
+      <Title>Contour Style</Title>
+      <FeatureTypeStyle>
+        <Rule>
+          <LineSymbolizer>
+            <Stroke>
+              <CssParameter name="stroke">#f59e0b</CssParameter>
+              <CssParameter name="stroke-width">1.5</CssParameter>
+              <CssParameter name="stroke-opacity">0.95</CssParameter>
+            </Stroke>
+          </LineSymbolizer>
+        </Rule>
+      </FeatureTypeStyle>
+    </UserStyle>
+  </NamedLayer>
+</StyledLayerDescriptor>`.trim();
+
+const addWmsLayer = async (payload: AnalysisLayerPayload) => {
   if (!viewer) {
     return;
+  }
+
+  const parameters: Record<string, string | boolean> = {
+    service: "WMS",
+    format: "image/png",
+    transparent: true,
+  };
+
+  if (payload.geoJsonUrl && payload.type === "vector") {
+    parameters.SLD_BODY = buildContourSld(payload.layers);
   }
 
   const provider = new Cesium.WebMapServiceImageryProvider({
     url: payload.wmsUrl,
     layers: payload.layers,
-    parameters: {
-      service: "WMS",
-      format: "image/png",
-      transparent: true,
-    },
+    parameters,
   });
 
   const imageryLayer = viewer.imageryLayers.addImageryProvider(provider);
+  imageryLayer.alpha = 1;
   loadedLayers.value = [
     ...loadedLayers.value,
     {
@@ -79,9 +113,18 @@ const addWmsLayer = (payload: AnalysisLayerPayload) => {
       resourceType: payload.resourceType,
       cleanupGroup: payload.cleanupGroup,
       geoJsonPath: payload.geoJsonPath,
+      bounds: payload.bounds,
       sourceAssetId: payload.sourceAssetId,
     },
   ];
+
+  if (payload.bounds) {
+    const [west, south, east, north] = payload.bounds;
+    viewer.camera.flyTo({
+      destination: Cesium.Rectangle.fromDegrees(west, south, east, north),
+      duration: 0.8,
+    });
+  }
 };
 
 onMounted(() => {

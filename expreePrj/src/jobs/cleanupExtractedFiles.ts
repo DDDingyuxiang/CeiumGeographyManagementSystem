@@ -11,6 +11,29 @@ const tempAnalysisRoot = path.join(geoserverDataRoot, "temp_analysis");
 const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
 const jobIntervalMs = 12 * 60 * 60 * 1000;
 
+const removeDirectoryQuietly = (targetPath: string) => {
+  try {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  } catch (error: any) {
+    if (error?.code !== "EPERM" && error?.code !== "EBUSY") {
+      throw error;
+    }
+    console.warn(`Skip removing busy cache directory: ${targetPath}`);
+  }
+};
+
+const inferTempAnalysisResourceType = (storeName: string) => {
+  if (
+    storeName.startsWith("hillshade_") ||
+    storeName.startsWith("slope_") ||
+    storeName.startsWith("aspect_")
+  ) {
+    return "coverage";
+  }
+
+  return "datastore";
+};
+
 const removeExpiredDirectories = (dir: string, now: number) => {
   if (!fs.existsSync(dir)) {
     return;
@@ -25,14 +48,14 @@ const removeExpiredDirectories = (dir: string, now: number) => {
     }
 
     if (now - stat.mtimeMs > threeDaysMs) {
-      fs.rmSync(fullPath, { recursive: true, force: true });
+      removeDirectoryQuietly(fullPath);
       continue;
     }
 
     removeExpiredDirectories(fullPath, now);
 
     if (fs.existsSync(fullPath) && fs.readdirSync(fullPath).length === 0) {
-      fs.rmSync(fullPath, { recursive: true, force: true });
+      removeDirectoryQuietly(fullPath);
     }
   }
 };
@@ -64,7 +87,7 @@ const removeExpiredGeoServerCaches = async (
       console.error(`Failed to clean GeoServer resource ${entry}:`, error);
     }
 
-    fs.rmSync(fullPath, { recursive: true, force: true });
+    removeDirectoryQuietly(fullPath);
   }
 };
 
@@ -87,6 +110,11 @@ export const cleanupExtractedFiles = async () => {
 
   try {
     await removeExpiredGeoServerCaches(tempAnalysisRoot, now, async (storeName) => {
+      if (inferTempAnalysisResourceType(storeName) === "coverage") {
+        await Gs_Client.client.coveragestores.delete(userWorkspace, storeName);
+        return;
+      }
+
       await Gs_Client.client.datastores.delete(userWorkspace, storeName);
     });
   } catch (error) {

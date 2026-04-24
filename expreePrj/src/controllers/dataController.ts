@@ -361,29 +361,37 @@ export const publishData = async (req: Request, res: Response) => {
 export const cleanupResources = async (req: Request, res: Response) => {
   const { workspace, resources } = req.body;
 
+  const removeLocalStoreDir = (storeName: string, cleanupGroup?: string) => {
+    const localStoreDir =
+      cleanupGroup === "analysis"
+        ? path.join(tempAnalysisRoot, storeName)
+        : path.join(geoserverDataRoot, workspace, storeName);
+
+    if (!fs.existsSync(localStoreDir)) {
+      return;
+    }
+
+    try {
+      fs.rmSync(localStoreDir, { recursive: true, force: true });
+    } catch (error: any) {
+      if (error?.code !== "EPERM" && error?.code !== "EBUSY") {
+        throw error;
+      }
+      console.warn(`Skip removing busy temp directory: ${localStoreDir}`);
+    }
+  };
+
   for (const item of resources) {
     try {
       if (item.resourceType === "datastore") {
         await gsClient.datastores.delete(workspace, item.storeName);
-
-        const localStoreDir =
-          item.cleanupGroup === "analysis"
-            ? path.join(tempAnalysisRoot, item.storeName)
-            : path.join(geoserverDataRoot, workspace, item.storeName);
-        if (fs.existsSync(localStoreDir)) {
-          fs.rmSync(localStoreDir, { recursive: true, force: true });
-        }
+        removeLocalStoreDir(item.storeName, item.cleanupGroup);
         continue;
       }
 
       if (item.resourceType === "coverage") {
         await gsClient.coveragestores.delete(workspace, item.storeName);
-        if (item.cleanupGroup === "analysis") {
-          const localStoreDir = path.join(tempAnalysisRoot, item.storeName);
-          if (fs.existsSync(localStoreDir)) {
-            fs.rmSync(localStoreDir, { recursive: true, force: true });
-          }
-        }
+        removeLocalStoreDir(item.storeName, item.cleanupGroup);
         continue;
       }
     } catch (e: any) {

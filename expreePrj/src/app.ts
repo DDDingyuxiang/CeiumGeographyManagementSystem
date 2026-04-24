@@ -35,6 +35,17 @@ app.use(
   }),
 );
 
+app.use(
+  "/temp-analysis",
+  express.static(path.join(process.cwd(), "geoserver_data", "temp_analysis"), {
+    setHeaders: (res: ServerResponse) => {
+      res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+      res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    },
+  }),
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

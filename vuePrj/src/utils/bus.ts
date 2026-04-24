@@ -11,6 +11,8 @@ export interface AnalysisLayerPayload {
   resourceType?: string;
   cleanupGroup?: string;
   geoJsonPath?: string;
+  geoJsonUrl?: string;
+  bounds?: [number, number, number, number];
   sourceAssetId?: string;
 }
 

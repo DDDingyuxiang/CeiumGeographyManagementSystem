@@ -3,9 +3,13 @@ import { computed, defineAsyncComponent, markRaw } from "vue";
 import type { WorkbenchLayerItem } from "@/views/Workbench.vue";
 
 const BufferForm = defineAsyncComponent(() => import("./toolsWidget/BufferForm.vue"));
+const ContourForm = defineAsyncComponent(() => import("./toolsWidget/ContourForm.vue"));
 const CoordTransform = defineAsyncComponent(() => import("./toolsWidget/CoordTransform.vue"));
 const HillshadeForm = defineAsyncComponent(
   () => import("./toolsWidget/HillshadeForm.vue"),
+);
+const SlopeAspectForm = defineAsyncComponent(
+  () => import("./toolsWidget/SlopeAspectForm.vue"),
 );
 
 const props = defineProps<{
@@ -18,6 +22,8 @@ const emit = defineEmits(["close"]);
 const TOOL_CONFIG: Record<number, { title: string; component: any }> = {
   10001: { title: "坐标转换", component: markRaw(CoordTransform) },
   10004: { title: "缓冲区分析", component: markRaw(BufferForm) },
+  20004: { title: "坡度/坡向", component: markRaw(SlopeAspectForm) },
+  20005: { title: "等高线提取", component: markRaw(ContourForm) },
   20006: { title: "山体阴影", component: markRaw(HillshadeForm) },
 };
 

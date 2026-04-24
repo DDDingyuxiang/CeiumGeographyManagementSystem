@@ -21,6 +21,10 @@ export const dispatchTask = async (
   switch (toolId) {
     case 10004:
       return runBufferTool1004(asset, params, workspace);
+    case 20004:
+      return runSlopeAspectTool20004(asset, params, workspace);
+    case 20005:
+      return runContourTool20005(asset, params, workspace);
     case 20006:
       return runHillshadeTool20006(asset, params, workspace);
     default:
@@ -138,6 +142,55 @@ function prepareRasterInput(asset: any) {
   return inputPath;
 }
 
+async function publishCoverageStore(
+  workspace: string,
+  storeName: string,
+  outputPath: string,
+) {
+  await Gs_Client.client.coveragestores.create(workspace, {
+    name: storeName,
+    type: "GeoTIFF",
+    url: `file:///${outputPath.replace(/\\/g, "/")}`,
+  });
+
+  await Gs_Client.client.coverages.publish(workspace, storeName, {
+    name: storeName,
+  });
+
+  return {
+    wmsUrl: `${Gs_Client.baseUrl}/wms`,
+    layers: `${workspace}:${storeName}`,
+    tempStoreName: storeName,
+    storeName,
+    resourceType: "coverage",
+    cleanupGroup: "analysis",
+  };
+}
+
+async function publishDatastore(
+  workspace: string,
+  storeName: string,
+  featureName: string,
+  shapefilePath: string,
+) {
+  await Gs_Client.client.datastores.create(workspace, {
+    name: storeName,
+    charset: "UTF-8",
+    url: `file://${shapefilePath.replace(/\\/g, "/")}`,
+  });
+
+  await Gs_Client.client.datastores.publish(workspace, storeName, featureName);
+
+  return {
+    wmsUrl: `${Gs_Client.baseUrl}/wms`,
+    layers: `${workspace}:${featureName}`,
+    tempStoreName: storeName,
+    storeName,
+    resourceType: "datastore",
+    cleanupGroup: "analysis",
+  };
+}
+
 async function runBufferTool1004(
   asset: any,
   params: Record<string, unknown>,
@@ -177,23 +230,10 @@ async function runBufferTool1004(
     throw new Error(`输出shp文件不存在: ${shapefilePath}`);
   }
 
-  await Gs_Client.client.datastores.create(workspace, {
-    name: storeName,
-    charset: "UTF-8",
-    url: `file://${shapefilePath.replace(/\\/g, "/")}`,
-  });
-
-  await Gs_Client.client.datastores.publish(workspace, storeName, outputBaseName);
-
   return {
     layerName: `buffer_${radius}m`,
-    wmsUrl: `${Gs_Client.baseUrl}/wms`,
-    layers: `${workspace}:${outputBaseName}`,
     geoJsonPath,
-    tempStoreName: storeName,
-    storeName,
-    resourceType: "datastore",
-    cleanupGroup: "analysis",
+    ...(await publishDatastore(workspace, storeName, outputBaseName, shapefilePath)),
   };
 }
 
@@ -245,23 +285,130 @@ async function runHillshadeTool20006(
     throw new Error(`输出栅格文件不存在: ${outputPath}`);
   }
 
-  await Gs_Client.client.coveragestores.create(workspace, {
-    name: storeName,
-    type: "GeoTIFF",
-    url: `file:///${outputPath.replace(/\\/g, "/")}`,
-  });
-
-  await Gs_Client.client.coverages.publish(workspace, storeName, {
-    name: storeName,
-  });
-
   return {
     layerName: `${asset.name}_hillshade`,
-    wmsUrl: `${Gs_Client.baseUrl}/wms`,
-    layers: `${workspace}:${storeName}`,
-    tempStoreName: storeName,
-    storeName,
-    resourceType: "coverage",
-    cleanupGroup: "analysis",
+    ...(await publishCoverageStore(workspace, storeName, outputPath)),
+  };
+}
+
+async function runSlopeAspectTool20004(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  await ensureWorkspace(workspace);
+
+  const inputPath = prepareRasterInput(asset);
+  const analysisType = String(params.analysisType ?? "slope").toLowerCase();
+  const zFactor = Number(params.zFactor ?? 1);
+  const scale = Number(params.scale ?? 1);
+
+  if (!["slope", "aspect"].includes(analysisType)) {
+    throw new Error("analysisType must be either slope or aspect.");
+  }
+
+  if (!Number.isFinite(zFactor) || zFactor <= 0) {
+    throw new Error("zFactor must be greater than 0.");
+  }
+
+  if (!Number.isFinite(scale) || scale <= 0) {
+    throw new Error("scale must be greater than 0.");
+  }
+
+  const timestamp = Date.now();
+  const suffix = analysisType === "aspect" ? "aspect" : "slope";
+  const storeName = `${suffix}_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const outputPath = path.join(outDir, `${storeName}.tif`);
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const pythonScript = path.join(__dirname, "python", "runSlopeAspect.py");
+
+  if (!fs.existsSync(pythonScript)) {
+    throw new Error(`Python script not found: ${pythonScript}`);
+  }
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${outputPath}" ` +
+    `${analysisType} ${zFactor} ${scale}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error(`Output raster file not found: ${outputPath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_${suffix}`,
+    ...(await publishCoverageStore(workspace, storeName, outputPath)),
+  };
+}
+
+async function runContourTool20005(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  await ensureWorkspace(workspace);
+
+  const inputPath = prepareRasterInput(asset);
+  const interval = Number(params.interval ?? 10);
+  const base = Number(params.base ?? 0);
+
+  if (!Number.isFinite(interval) || interval <= 0) {
+    throw new Error("Contour interval must be greater than 0.");
+  }
+
+  if (!Number.isFinite(base)) {
+    throw new Error("Contour base must be a valid number.");
+  }
+
+  const timestamp = Date.now();
+  const storeName = `contour_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const featureName = storeName;
+  const shapefilePath = path.join(outDir, `${featureName}.shp`);
+  const geoJsonPath = path.join(outDir, `${featureName}.geojson`);
+  const metaPath = path.join(outDir, `${featureName}.meta.json`);
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const pythonScript = path.join(__dirname, "python", "runContour.py");
+
+  if (!fs.existsSync(pythonScript)) {
+    throw new Error(`Python script not found: ${pythonScript}`);
+  }
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${shapefilePath}" ` +
+    `"${geoJsonPath}" ${interval} ${base}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(shapefilePath)) {
+    throw new Error(`Output shapefile not found: ${shapefilePath}`);
+  }
+
+  let bounds: [number, number, number, number] | undefined;
+  if (fs.existsSync(metaPath)) {
+    const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+    if (
+      Array.isArray(meta.bounds) &&
+      meta.bounds.length === 4 &&
+      meta.bounds.every((value: unknown) => Number.isFinite(value))
+    ) {
+      bounds = meta.bounds as [number, number, number, number];
+    }
+  }
+
+  return {
+    layerName: `${asset.name}_contour`,
+    geoJsonPath,
+    geoJsonUrl: `/temp-analysis/${storeName}/${featureName}.geojson`,
+    bounds,
+    ...(await publishDatastore(workspace, storeName, featureName, shapefilePath)),
   };
 }
