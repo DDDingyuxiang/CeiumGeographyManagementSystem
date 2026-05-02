@@ -21,8 +21,10 @@ export interface WorkbenchLayerItem {
   resourceType?: string;
   cleanupGroup?: string;
   geoJsonPath?: string;
+  geoJsonUrl?: string;
   bounds?: [number, number, number, number];
   sourceAssetId?: string;
+  styleKind?: "contour" | "point" | "polygon";
 }
 
 declare global {
@@ -76,6 +78,66 @@ const buildContourSld = (layerName: string) => `
   </NamedLayer>
 </StyledLayerDescriptor>`.trim();
 
+const buildVectorSld = (layerName: string, styleKind: string) => {
+  const symbolizer =
+    styleKind === "point"
+      ? `
+          <PointSymbolizer>
+            <Graphic>
+              <Mark>
+                <WellKnownName>circle</WellKnownName>
+                <Fill>
+                  <CssParameter name="fill">#ef4444</CssParameter>
+                  <CssParameter name="fill-opacity">0.95</CssParameter>
+                </Fill>
+                <Stroke>
+                  <CssParameter name="stroke">#ffffff</CssParameter>
+                  <CssParameter name="stroke-width">1</CssParameter>
+                </Stroke>
+              </Mark>
+              <Size>8</Size>
+            </Graphic>
+          </PointSymbolizer>`
+      : `
+          <PolygonSymbolizer>
+            <Fill>
+              <CssParameter name="fill">#38bdf8</CssParameter>
+              <CssParameter name="fill-opacity">0.28</CssParameter>
+            </Fill>
+            <Stroke>
+              <CssParameter name="stroke">#0ea5e9</CssParameter>
+              <CssParameter name="stroke-width">1.4</CssParameter>
+              <CssParameter name="stroke-opacity">0.95</CssParameter>
+            </Stroke>
+          </PolygonSymbolizer>
+          <LineSymbolizer>
+            <Stroke>
+              <CssParameter name="stroke">#0ea5e9</CssParameter>
+              <CssParameter name="stroke-width">1.4</CssParameter>
+              <CssParameter name="stroke-opacity">0.95</CssParameter>
+            </Stroke>
+          </LineSymbolizer>`;
+
+  return `
+<StyledLayerDescriptor version="1.0.0"
+  xsi:schemaLocation="http://www.opengis.net/sld StyledLayerDescriptor.xsd"
+  xmlns="http://www.opengis.net/sld"
+  xmlns:ogc="http://www.opengis.net/ogc"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <NamedLayer>
+    <Name>${layerName}</Name>
+    <UserStyle>
+      <Title>Vector Analysis Style</Title>
+      <FeatureTypeStyle>
+        <Rule>${symbolizer}
+        </Rule>
+      </FeatureTypeStyle>
+    </UserStyle>
+  </NamedLayer>
+</StyledLayerDescriptor>`.trim();
+};
+
 const addWmsLayer = async (payload: AnalysisLayerPayload) => {
   if (!viewer) {
     return;
@@ -87,8 +149,10 @@ const addWmsLayer = async (payload: AnalysisLayerPayload) => {
     transparent: true,
   };
 
-  if (payload.geoJsonUrl && payload.type === "vector") {
+  if (payload.styleKind === "contour") {
     parameters.SLD_BODY = buildContourSld(payload.layers);
+  } else if (payload.styleKind) {
+    parameters.SLD_BODY = buildVectorSld(payload.layers, payload.styleKind);
   }
 
   const provider = new Cesium.WebMapServiceImageryProvider({
@@ -113,8 +177,10 @@ const addWmsLayer = async (payload: AnalysisLayerPayload) => {
       resourceType: payload.resourceType,
       cleanupGroup: payload.cleanupGroup,
       geoJsonPath: payload.geoJsonPath,
+      geoJsonUrl: payload.geoJsonUrl,
       bounds: payload.bounds,
       sourceAssetId: payload.sourceAssetId,
+      styleKind: payload.styleKind,
     },
   ];
 
@@ -182,6 +248,23 @@ const handleDropOnMap = async () => {
 
 const executeTool = (toolId: number) => {
   activeToolId.value = toolId;
+};
+
+const getZoomAmount = () => {
+  if (!viewer) {
+    return 1000;
+  }
+
+  const height = viewer.camera.positionCartographic.height;
+  return Math.max(height * 0.45, 200);
+};
+
+const zoomIn = () => {
+  viewer?.camera.zoomIn(getZoomAmount());
+};
+
+const zoomOut = () => {
+  viewer?.camera.zoomOut(getZoomAmount());
 };
 </script>
 
@@ -270,6 +353,15 @@ const executeTool = (toolId: number) => {
 
         <div class="map-container" @dragenter.prevent @dragover.prevent @drop="handleDropOnMap">
           <div id="cesiumContainer"></div>
+
+          <div class="map-zoom-controls" aria-label="地图缩放">
+            <button class="zoom-btn" type="button" title="放大" @click="zoomIn">
+              <span>+</span>
+            </button>
+            <button class="zoom-btn" type="button" title="缩小" @click="zoomOut">
+              <span>-</span>
+            </button>
+          </div>
 
           <div v-if="isDragging" class="drag-overlay">
             <div class="drag-hint">
@@ -476,6 +568,52 @@ const executeTool = (toolId: number) => {
 #cesiumContainer {
   width: 100%;
   height: 100%;
+}
+
+.map-zoom-controls {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.zoom-btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: black;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+
+.zoom-btn span {
+  line-height: 1;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.zoom-btn:hover {
+  background: rgba(37, 99, 235, 0.24);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #bfdbfe;
 }
 
 :deep(.cesium-infoBox),

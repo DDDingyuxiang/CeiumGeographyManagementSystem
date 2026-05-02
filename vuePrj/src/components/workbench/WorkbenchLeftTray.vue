@@ -37,6 +37,12 @@ const emit = defineEmits<{
 const leftPanelActive = ref(false);
 const draggedItem = ref<UserDatasetItem | null>(null);
 const isDragging = ref(false);
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  layer: null as LayerItem | null,
+});
 
 const userData = ref<UserDatasetItem[]>([]);
 const createdResources = ref<CreatedResourceItem[]>([]);
@@ -49,6 +55,38 @@ const displayedLayers = computed(() => {
 
 const updateLayers = (layers: LayerItem[]) => {
   emit("update:layers", layers);
+};
+
+const syncImageryLayers = (nextLayers: LayerItem[]) => {
+  if (!props.viewer) {
+    return;
+  }
+
+  const providerCache = new Map<LayerItem["id"], Cesium.ImageryProvider>();
+  props.layers.forEach((item) => {
+    if (item.id !== 0 && item.cesiumLayer) {
+      providerCache.set(item.id, item.cesiumLayer.imageryProvider);
+    }
+  });
+
+  const imageryLayers = props.viewer.imageryLayers;
+  while (imageryLayers.length > 1) {
+    imageryLayers.remove(imageryLayers.get(1), false);
+  }
+
+  const userLayers = nextLayers.filter((item) => item.id !== 0);
+  for (const item of userLayers) {
+    const provider = providerCache.get(item.id);
+    if (!provider) {
+      continue;
+    }
+
+    const newLayer = imageryLayers.addImageryProvider(provider);
+    newLayer.show = item.visible;
+    item.cesiumLayer = newLayer;
+  }
+
+  props.viewer.scene.requestRender();
 };
 
 const updateDraggingState = (value: boolean) => {
@@ -105,9 +143,63 @@ const toggleLayerVisibility = (data: LayerItem) => {
   );
 };
 
+const hideContextMenu = () => {
+  contextMenu.value.visible = false;
+};
+
 const handleNodeContextMenu = (event: Event, data: LayerItem) => {
   event.preventDefault();
-  console.log("右键菜单:", data);
+  const mouseEvent = event as MouseEvent;
+  mouseEvent.stopPropagation();
+  contextMenu.value = {
+    visible: true,
+    x: mouseEvent.clientX,
+    y: mouseEvent.clientY,
+    layer: data,
+  };
+};
+
+const removeLayer = (data: LayerItem | null = contextMenu.value.layer) => {
+  hideContextMenu();
+
+  if (!data || data.id === 0 || !props.viewer) {
+    return;
+  }
+
+  const nextLayers = props.layers.filter((layer) => layer.id !== data.id);
+  syncImageryLayers(nextLayers);
+  updateLayers(nextLayers);
+  ElMessage.success("图层已移除");
+};
+
+const zoomToLayer = (data: LayerItem | null = contextMenu.value.layer) => {
+  hideContextMenu();
+
+  if (!data || !props.viewer) {
+    return;
+  }
+
+  const currentLayer = props.layers.find((layer) => layer.id === data.id) ?? data;
+
+  if (currentLayer.bounds) {
+    const [west, south, east, north] = currentLayer.bounds;
+    props.viewer.camera.flyTo({
+      destination: Cesium.Rectangle.fromDegrees(west, south, east, north),
+      duration: 0.8,
+    });
+    return;
+  }
+
+  const rectangle = currentLayer.cesiumLayer?.imageryProvider.rectangle;
+  if (rectangle) {
+    props.viewer.camera.flyTo({
+      destination: rectangle,
+      duration: 0.8,
+    });
+    return;
+  }
+
+  ElMessage.warning("该图层暂无可用范围信息");
 };
 
 const handleDragStart = (item: UserDatasetItem, event: DragEvent) => {
@@ -194,6 +286,7 @@ const handleDropOnMap = async () => {
           storeName,
           resourceType,
           cleanupGroup: res.cleanupGroup,
+          bounds: res.bounds,
         },
       ]);
 
@@ -221,46 +314,13 @@ const allowDrag = (node: any) => node.data.id !== 0;
 const handleLayerDrop = () => {
   if (!props.viewer) return;
 
-  const providerCache = new Map<LayerItem["id"], Cesium.ImageryProvider>();
-  props.layers.forEach((item) => {
-    if (item.id !== 0 && item.cesiumLayer) {
-      providerCache.set(item.id, item.cesiumLayer.imageryProvider);
-    }
-  });
-
   const newUiOrder = displayedLayers.value.filter((item) => item.id !== 0);
   const nextLayers = [
     ...props.layers.filter((item) => item.id === 0),
     ...[...newUiOrder].reverse(),
   ];
+  syncImageryLayers(nextLayers);
   updateLayers(nextLayers);
-
-  const imageryLayers = props.viewer.imageryLayers;
-  while (imageryLayers.length > 1) {
-    imageryLayers.remove(imageryLayers.get(1));
-  }
-
-  for (let i = newUiOrder.length - 1; i >= 0; i -= 1) {
-    const item = newUiOrder[i];
-    if (!item) {
-      continue;
-    }
-
-    const provider = providerCache.get(item.id);
-    if (!provider) {
-      continue;
-    }
-
-    const newLayer = imageryLayers.addImageryProvider(provider);
-    newLayer.show = item.visible;
-
-    const target = nextLayers.find((layer) => layer.id === item.id);
-    if (target) {
-      target.cesiumLayer = newLayer;
-    }
-  }
-
-  props.viewer.scene.requestRender();
 };
 
 const handleCleanup = () => {
@@ -295,10 +355,14 @@ const handleCleanup = () => {
 
 onMounted(() => {
   window.addEventListener("beforeunload", handleCleanup);
+  window.addEventListener("click", hideContextMenu);
+  window.addEventListener("contextmenu", hideContextMenu);
 });
 
 onUnmounted(() => {
   window.removeEventListener("beforeunload", handleCleanup);
+  window.removeEventListener("click", hideContextMenu);
+  window.removeEventListener("contextmenu", hideContextMenu);
   handleCleanup();
 });
 
@@ -473,6 +537,29 @@ defineExpose({
       </div>
     </aside>
   </transition>
+
+  <teleport to="body">
+    <div
+      v-if="contextMenu.visible"
+      class="layer-context-menu"
+      :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+      @click.stop
+      @contextmenu.prevent.stop
+    >
+      <button type="button" class="context-menu-item" @click="zoomToLayer()">
+        缩放至
+      </button>
+      <div class="context-menu-divider"></div>
+      <button
+        type="button"
+        class="context-menu-item danger"
+        :disabled="contextMenu.layer?.id === 0"
+        @click="removeLayer()"
+      >
+        移除
+      </button>
+    </div>
+  </teleport>
 </template>
 
 <style scoped>
@@ -764,5 +851,58 @@ defineExpose({
 
 :deep(.el-tree-node.is-drop-inner > .el-tree-node__content) {
   background-color: rgba(37, 99, 235, 0.2) !important;
+}
+
+.layer-context-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 132px;
+  padding: 6px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+}
+
+.context-menu-item {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.18);
+  color: #bfdbfe;
+}
+
+.context-menu-item.danger {
+  color: #fca5a5;
+}
+
+.context-menu-item.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecaca;
+}
+
+.context-menu-item:disabled {
+  cursor: not-allowed;
+  color: #64748b;
+  opacity: 0.7;
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 5px 4px;
+  background: rgba(148, 163, 184, 0.16);
 }
 </style>

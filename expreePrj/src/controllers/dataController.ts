@@ -27,6 +27,60 @@ const sanitizeName = (value: string) =>
 const buildStoreName = (assetId: string, shpName: string) =>
   `shp_${sanitizeName(assetId)}_${sanitizeName(shpName)}`;
 
+const isFiniteBounds = (bounds: unknown): bounds is [number, number, number, number] =>
+  Array.isArray(bounds) &&
+  bounds.length === 4 &&
+  bounds.every((value) => Number.isFinite(value));
+
+const extractGeoJsonBounds = (geoJson: any): [number, number, number, number] | undefined => {
+  if (isFiniteBounds(geoJson?.bbox)) {
+    return geoJson.bbox;
+  }
+
+  const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+
+  const scanCoordinates = (coordinates: any) => {
+    if (!Array.isArray(coordinates)) {
+      return;
+    }
+
+    if (
+      coordinates.length >= 2 &&
+      typeof coordinates[0] === "number" &&
+      typeof coordinates[1] === "number"
+    ) {
+      const x = coordinates[0] as number;
+      const y = coordinates[1] as number;
+      bounds[0] = Math.min(bounds[0]!, x);
+      bounds[1] = Math.min(bounds[1]!, y);
+      bounds[2] = Math.max(bounds[2]!, x);
+      bounds[3] = Math.max(bounds[3]!, y);
+      return;
+    }
+
+    coordinates.forEach(scanCoordinates);
+  };
+
+  for (const feature of geoJson?.features ?? []) {
+    scanCoordinates(feature?.geometry?.coordinates);
+  }
+
+  return bounds.every(Number.isFinite)
+    ? (bounds as [number, number, number, number])
+    : undefined;
+};
+
+const fetchGeoServerBounds = async (
+  getter: () => Promise<[number, number, number, number] | undefined>,
+) => {
+  try {
+    const bounds = await getter();
+    return isFiniteBounds(bounds) ? bounds : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const getAssetIdentifier = (asset: IDataAsset) => {
   const assetIdentifier = asset.id || asset._id?.toString();
   if (!assetIdentifier) {
@@ -138,6 +192,9 @@ const ensureShapefileStore = async (
     layerName: shpName,
     fullLayerName: `${workspace}:${shpName}`,
     resourceType: "datastore",
+    bounds: await fetchGeoServerBounds(() =>
+      gsClient.datastores.getBounds(workspace, storeName, shpName),
+    ),
   };
 };
 
@@ -261,6 +318,10 @@ export const publishData = async (req: Request, res: Response) => {
         }
       }
 
+      const bounds = await fetchGeoServerBounds(() =>
+        gsClient.coverages.getBounds(userWorkspace, commonName, commonName),
+      );
+
       return res.json({
         code: 200,
         message: "TIFF发布成功",
@@ -270,6 +331,7 @@ export const publishData = async (req: Request, res: Response) => {
         cleanupGroup: "workspace",
         wmsUrl: `${geoserverUrl}/wms`,
         layers: `${userWorkspace}:${commonName}`,
+        bounds,
       });
     }
 
@@ -278,6 +340,7 @@ export const publishData = async (req: Request, res: Response) => {
       rawData = rawData.replace(/^\uFEFF/, "").trim();
 
       const geoJson = JSON.parse(rawData);
+      const bounds = extractGeoJsonBounds(geoJson);
       const features = geoJson.features.map((f: any) => ({
         user_id: userid,
         asset_id: assetId,
@@ -300,6 +363,7 @@ export const publishData = async (req: Request, res: Response) => {
         wmsUrl: `${geoserverUrl}/wms`,
         layers: `${userWorkspace}:user_features_sql_view`,
         viewparams: `aid:${assetId}`,
+        bounds,
       });
     }
 
@@ -347,7 +411,9 @@ export const publishData = async (req: Request, res: Response) => {
           layers: item.fullLayerName,
           storeName: item.storeName,
           resourceType: item.resourceType,
+          bounds: item.bounds,
         })),
+        bounds: mainResult.bounds,
       });
     }
 

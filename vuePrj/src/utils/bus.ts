@@ -14,6 +14,7 @@ export interface AnalysisLayerPayload {
   geoJsonUrl?: string;
   bounds?: [number, number, number, number];
   sourceAssetId?: string;
+  styleKind?: "contour" | "point" | "polygon";
 }
 
 type Events = {

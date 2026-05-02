@@ -19,14 +19,10 @@ const toolCategories = ref([
     id: "vector",
     title: "矢量工具箱",
     tools: [
-      { name: "坐标转换", desc: "投影互转", toolId: 10001 },
-      { name: "格式转换", desc: "Shapefile/GeoJSON/KML/GML互转", toolId: 10002 },
       { name: "要素简化", desc: "抽稀边界优化渲染性能", toolId: 10003 },
       { name: "缓冲区分析", desc: "生成点线面影响范围", toolId: 10004 },
       { name: "叠加分析", desc: "交集/并集/擦除操作", toolId: 10005 },
       { name: "质心提取", desc: "计算多边形几何中心", toolId: 10006 },
-      { name: "字段计算", desc: "SQL/Python表达式批量修改", toolId: 10007 },
-      { name: "空间连接", desc: "基于位置关系属性赋值", toolId: 10008 },
     ],
   },
   {

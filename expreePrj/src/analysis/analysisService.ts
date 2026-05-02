@@ -3,6 +3,7 @@ import path from "path";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import { Gs_Client } from "../config/geoserver.js";
+import { DataAsset } from "../models/DataAsset.js";
 
 const PYTHON_PATH = process.env.PYTHON_PATH || "python";
 const geoserverDataRoot = path.join(process.cwd(), "geoserver_data");
@@ -19,8 +20,14 @@ export const dispatchTask = async (
   const workspace = Gs_Client.workspace || "user_data_space";
 
   switch (toolId) {
+    case 10003:
+      return runSimplifyTool10003(asset, params, workspace);
     case 10004:
       return runBufferTool1004(asset, params, workspace);
+    case 10005:
+      return runOverlayTool10005(asset, params, workspace);
+    case 10006:
+      return runCentroidTool10006(asset, params, workspace);
     case 20004:
       return runSlopeAspectTool20004(asset, params, workspace);
     case 20005:
@@ -37,6 +44,35 @@ async function ensureWorkspace(workspace: string) {
   if (!exists) {
     await Gs_Client.client.workspaces.create(workspace);
   }
+}
+
+function getAnalysisPythonScript(scriptName: string) {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const pythonScript = path.join(__dirname, "python", scriptName);
+
+  if (!fs.existsSync(pythonScript)) {
+    throw new Error(`Python script not found: ${pythonScript}`);
+  }
+
+  return pythonScript;
+}
+
+function readBounds(metaPath: string): [number, number, number, number] | undefined {
+  if (!fs.existsSync(metaPath)) {
+    return undefined;
+  }
+
+  const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+  if (
+    Array.isArray(meta.bounds) &&
+    meta.bounds.length === 4 &&
+    meta.bounds.every((value: unknown) => Number.isFinite(value))
+  ) {
+    return meta.bounds as [number, number, number, number];
+  }
+
+  return undefined;
 }
 
 function getPythonEnv() {
@@ -234,6 +270,145 @@ async function runBufferTool1004(
     layerName: `buffer_${radius}m`,
     geoJsonPath,
     ...(await publishDatastore(workspace, storeName, outputBaseName, shapefilePath)),
+  };
+}
+
+async function runSimplifyTool10003(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  const tolerance = Number(params.tolerance ?? 10);
+  const preserveTopology = params.preserveTopology !== false;
+
+  if (!Number.isFinite(tolerance) || tolerance <= 0) {
+    throw new Error("Simplify tolerance must be greater than 0.");
+  }
+
+  const inputPath = path.resolve(await prepareWorkspaceShapefile(asset, workspace));
+  const timestamp = Date.now();
+  const storeName = `simp_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const featureName = storeName;
+  const geoJsonPath = path.join(outDir, `${featureName}.geojson`);
+  const shapefilePath = path.join(outDir, `${featureName}.shp`);
+  const metaPath = path.join(outDir, `${featureName}.meta.json`);
+  const pythonScript = getAnalysisPythonScript("runSimplify.py");
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${geoJsonPath}" ` +
+    `${tolerance} ${preserveTopology ? "true" : "false"}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(shapefilePath)) {
+    throw new Error(`Output shapefile not found: ${shapefilePath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_simplified`,
+    geoJsonPath,
+    geoJsonUrl: `/temp-analysis/${storeName}/${featureName}.geojson`,
+    bounds: readBounds(metaPath),
+    ...(await publishDatastore(workspace, storeName, featureName, shapefilePath)),
+  };
+}
+
+async function runOverlayTool10005(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  const overlayAssetId = String(params.overlayAssetId ?? "");
+  const userId = asset.userId;
+  const operation = String(params.operation ?? "intersection").toLowerCase();
+  const operationLabels: Record<string, string> = {
+    intersection: "intersection",
+    union: "union",
+    difference: "erase",
+  };
+
+  if (!overlayAssetId) {
+    throw new Error("Overlay layer is required.");
+  }
+
+  if (!Object.keys(operationLabels).includes(operation)) {
+    throw new Error("Overlay operation must be intersection, union, or difference.");
+  }
+
+  const overlayAsset = await DataAsset.findOne({ _id: overlayAssetId, userId } as any);
+  if (!overlayAsset) {
+    throw new Error("Overlay layer does not exist or is not accessible.");
+  }
+
+  const inputPath = path.resolve(await prepareWorkspaceShapefile(asset, workspace));
+  const overlayPath = path.resolve(await prepareWorkspaceShapefile(overlayAsset, workspace));
+  const timestamp = Date.now();
+  const storeName = `ovl_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const featureName = storeName;
+  const geoJsonPath = path.join(outDir, `${featureName}.geojson`);
+  const shapefilePath = path.join(outDir, `${featureName}.shp`);
+  const metaPath = path.join(outDir, `${featureName}.meta.json`);
+  const pythonScript = getAnalysisPythonScript("runOverlay.py");
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${overlayPath}" ` +
+    `"${geoJsonPath}" ${operation}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(shapefilePath)) {
+    throw new Error(`Output shapefile not found: ${shapefilePath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_${operationLabels[operation]}`,
+    geoJsonPath,
+    geoJsonUrl: `/temp-analysis/${storeName}/${featureName}.geojson`,
+    bounds: readBounds(metaPath),
+    ...(await publishDatastore(workspace, storeName, featureName, shapefilePath)),
+  };
+}
+
+async function runCentroidTool10006(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  const mode = String(params.mode ?? "centroid").toLowerCase();
+
+  if (!["centroid", "representative_point"].includes(mode)) {
+    throw new Error("Centroid mode must be centroid or representative_point.");
+  }
+
+  const inputPath = path.resolve(await prepareWorkspaceShapefile(asset, workspace));
+  const timestamp = Date.now();
+  const storeName = `cent_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const featureName = storeName;
+  const geoJsonPath = path.join(outDir, `${featureName}.geojson`);
+  const shapefilePath = path.join(outDir, `${featureName}.shp`);
+  const metaPath = path.join(outDir, `${featureName}.meta.json`);
+  const pythonScript = getAnalysisPythonScript("runCentroid.py");
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command = `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${geoJsonPath}" ${mode}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(shapefilePath)) {
+    throw new Error(`Output shapefile not found: ${shapefilePath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_centroid`,
+    geoJsonPath,
+    geoJsonUrl: `/temp-analysis/${storeName}/${featureName}.geojson`,
+    bounds: readBounds(metaPath),
+    ...(await publishDatastore(workspace, storeName, featureName, shapefilePath)),
   };
 }
 
