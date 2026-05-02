@@ -77,6 +77,20 @@ export class GeoServerClient {
   },
   delete: async (ws: string, store: string, name: string) => {
     return this.client.delete(`/workspaces/${ws}/coveragestores/${store}/coverages/${name}?recurse=true`);
+  },
+  getBounds: async (ws: string, store: string, name: string) => {
+    const res = await this.client.get(
+      `/workspaces/${ws}/coveragestores/${store}/coverages/${name}.json`,
+      { headers: { Accept: 'application/json' } },
+    );
+    const bbox = res.data?.coverage?.latLonBoundingBox || res.data?.coverage?.nativeBoundingBox;
+    if (!bbox) return undefined;
+    return [
+      Number(bbox.minx),
+      Number(bbox.miny),
+      Number(bbox.maxx),
+      Number(bbox.maxy),
+    ] as [number, number, number, number];
   }
 };
 
@@ -122,6 +136,21 @@ public datastores = {
 
     delete: async (ws: string, name: string) => {
         return this.client.delete(`/workspaces/${ws}/datastores/${name}?recurse=true`);
+    },
+
+    getBounds: async (ws: string, store: string, name: string) => {
+        const res = await this.client.get(
+            `/workspaces/${ws}/datastores/${store}/featuretypes/${name}.json`,
+            { headers: { Accept: 'application/json' } },
+        );
+        const bbox = res.data?.featureType?.latLonBoundingBox || res.data?.featureType?.nativeBoundingBox;
+        if (!bbox) return undefined;
+        return [
+            Number(bbox.minx),
+            Number(bbox.miny),
+            Number(bbox.maxx),
+            Number(bbox.maxy),
+        ] as [number, number, number, number];
     }
 };
 }

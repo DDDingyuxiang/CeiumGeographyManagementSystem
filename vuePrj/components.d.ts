@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     BufferForm: typeof import('./src/components/toolsWidget/BufferForm.vue')['default']
+    CentroidForm: typeof import('./src/components/toolsWidget/CentroidForm.vue')['default']
     ContourForm: typeof import('./src/components/toolsWidget/ContourForm.vue')['default']
     CoordTransform: typeof import('./src/components/toolsWidget/CoordTransform.vue')['default']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
@@ -39,8 +40,10 @@ declare module 'vue' {
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElTree: typeof import('element-plus/es')['ElTree']
     HillshadeForm: typeof import('./src/components/toolsWidget/HillshadeForm.vue')['default']
+    OverlayForm: typeof import('./src/components/toolsWidget/OverlayForm.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SimplifyForm: typeof import('./src/components/toolsWidget/SimplifyForm.vue')['default']
     SlopeAspectForm: typeof import('./src/components/toolsWidget/SlopeAspectForm.vue')['default']
     ToolPanel: typeof import('./src/components/ToolPanel.vue')['default']
     WorkbenchLeftTray: typeof import('./src/components/workbench/WorkbenchLeftTray.vue')['default']
