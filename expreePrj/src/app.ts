@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import { ServerResponse } from "http";
 import userRoutes from "./routes/userRoutes.js";
 import analysisRoutes from "./routes/analysisRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
 import { startExtractedFilesCleanupJob } from "./jobs/cleanupExtractedFiles.js";
 
 dotenv.config();
@@ -71,6 +72,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/analysis", analysisRoutes);
+app.use("/api/ai", aiRoutes);
 
 app.listen(port || 3000, () => {
   console.log("服务启动中");

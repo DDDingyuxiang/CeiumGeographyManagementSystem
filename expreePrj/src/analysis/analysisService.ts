@@ -20,6 +20,12 @@ export const dispatchTask = async (
   const workspace = Gs_Client.workspace || "user_data_space";
 
   switch (toolId) {
+    case 20001:
+      return runRasterClipTool20001(asset, params, workspace);
+    case 20002:
+      return runRasterMosaicTool20002(asset, params, workspace);
+    case 20003:
+      return runRasterResampleTool20003(asset, params, workspace);
     case 10003:
       return runSimplifyTool10003(asset, params, workspace);
     case 10004:
@@ -178,6 +184,15 @@ function prepareRasterInput(asset: any) {
   return inputPath;
 }
 
+async function getUserRasterAsset(assetId: string, userId: unknown) {
+  const rasterAsset = await DataAsset.findOne({ _id: assetId, userId } as any);
+  if (!rasterAsset) {
+    throw new Error("Raster layer does not exist or is not accessible.");
+  }
+
+  return rasterAsset;
+}
+
 async function publishCoverageStore(
   workspace: string,
   storeName: string,
@@ -224,6 +239,179 @@ async function publishDatastore(
     storeName,
     resourceType: "datastore",
     cleanupGroup: "analysis",
+  };
+}
+
+async function runRasterClipTool20001(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  await ensureWorkspace(workspace);
+
+  const inputPath = prepareRasterInput(asset);
+  const mode = String(params.mode ?? "extent").toLowerCase();
+  const nodata = params.nodata === undefined || params.nodata === "" ? "none" : Number(params.nodata);
+
+  if (!["extent", "mask"].includes(mode)) {
+    throw new Error("Clip mode must be extent or mask.");
+  }
+
+  if (nodata !== "none" && !Number.isFinite(nodata)) {
+    throw new Error("NoData value must be a valid number.");
+  }
+
+  let maskPath = "";
+  let bounds: number[] = [0, 0, 0, 0];
+
+  if (mode === "mask") {
+    const maskAssetId = String(params.maskAssetId ?? "");
+    if (!maskAssetId) {
+      throw new Error("Mask vector layer is required.");
+    }
+
+    const maskAsset = await DataAsset.findOne({ _id: maskAssetId, userId: asset.userId } as any);
+    if (!maskAsset) {
+      throw new Error("Mask layer does not exist or is not accessible.");
+    }
+    maskPath = path.resolve(await prepareWorkspaceShapefile(maskAsset, workspace));
+  } else {
+    bounds = [params.minX, params.minY, params.maxX, params.maxY].map(Number);
+    if (bounds.length !== 4 || bounds.some((value) => !Number.isFinite(value))) {
+      throw new Error("Extent clipping requires minX, minY, maxX and maxY.");
+    }
+
+    const [minX, minY, maxX, maxY] = bounds as [number, number, number, number];
+    if (minX >= maxX || minY >= maxY) {
+      throw new Error("Clip extent is invalid.");
+    }
+  }
+
+  const timestamp = Date.now();
+  const storeName = `clip_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const outputPath = path.join(outDir, `${storeName}.tif`);
+  const pythonScript = getAnalysisPythonScript("runRasterClip.py");
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${outputPath}" ` +
+    `${mode} "${maskPath}" ${bounds.join(" ")} ${nodata}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error(`Output raster file not found: ${outputPath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_clip`,
+    ...(await publishCoverageStore(workspace, storeName, outputPath)),
+  };
+}
+
+async function runRasterMosaicTool20002(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  await ensureWorkspace(workspace);
+
+  const rasterAssetIds = Array.isArray(params.rasterAssetIds)
+    ? params.rasterAssetIds.map(String)
+    : typeof params.rasterAssetIds === "string"
+      ? params.rasterAssetIds.split(",").map((assetId) => assetId.trim()).filter(Boolean)
+      : [];
+  const uniqueAssetIds = Array.from(new Set([asset._id.toString(), ...rasterAssetIds]));
+
+  if (uniqueAssetIds.length < 2) {
+    throw new Error("Mosaic requires at least two raster layers.");
+  }
+
+  const rasterAssets = await Promise.all(
+    uniqueAssetIds.map((assetId) => getUserRasterAsset(assetId, asset.userId)),
+  );
+  const inputPaths = rasterAssets.map((rasterAsset) => prepareRasterInput(rasterAsset));
+  const resampling = String(params.resampling ?? "nearest").toLowerCase();
+  const nodata = params.nodata === undefined || params.nodata === "" ? "none" : Number(params.nodata);
+
+  if (!["nearest", "bilinear", "cubic", "average"].includes(resampling)) {
+    throw new Error("Resampling method must be nearest, bilinear, cubic, or average.");
+  }
+
+  if (nodata !== "none" && !Number.isFinite(nodata)) {
+    throw new Error("NoData value must be a valid number.");
+  }
+
+  const timestamp = Date.now();
+  const storeName = `mosaic_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const outputPath = path.join(outDir, `${storeName}.tif`);
+  const inputListPath = path.join(outDir, "inputs.txt");
+  const pythonScript = getAnalysisPythonScript("runRasterMosaic.py");
+
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(inputListPath, inputPaths.join("\n"), "utf-8");
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputListPath}" "${outputPath}" ` +
+    `${resampling} ${nodata}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error(`Output raster file not found: ${outputPath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_mosaic`,
+    ...(await publishCoverageStore(workspace, storeName, outputPath)),
+  };
+}
+
+async function runRasterResampleTool20003(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  await ensureWorkspace(workspace);
+
+  const inputPath = prepareRasterInput(asset);
+  const pixelSize = Number(params.pixelSize);
+  const resampling = String(params.resampling ?? "bilinear").toLowerCase();
+  const nodata = params.nodata === undefined || params.nodata === "" ? "none" : Number(params.nodata);
+
+  if (!Number.isFinite(pixelSize) || pixelSize <= 0) {
+    throw new Error("Pixel size must be greater than 0.");
+  }
+
+  if (!["nearest", "bilinear", "cubic", "average"].includes(resampling)) {
+    throw new Error("Resampling method must be nearest, bilinear, cubic, or average.");
+  }
+
+  if (nodata !== "none" && !Number.isFinite(nodata)) {
+    throw new Error("NoData value must be a valid number.");
+  }
+
+  const timestamp = Date.now();
+  const storeName = `resample_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const outputPath = path.join(outDir, `${storeName}.tif`);
+  const pythonScript = getAnalysisPythonScript("runRasterResample.py");
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${outputPath}" ` +
+    `${pixelSize} ${resampling} ${nodata}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error(`Output raster file not found: ${outputPath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_resampled`,
+    ...(await publishCoverageStore(workspace, storeName, outputPath)),
   };
 }
 

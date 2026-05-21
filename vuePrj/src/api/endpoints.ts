@@ -6,6 +6,9 @@ export const API_ENDPOINTS = {
   analysis: {
     submitTask: "/analysis/task",
   },
+  ai: {
+    plan: "/ai/plan",
+  },
   users: {
     profile: "/users/profile",
     updateProfile: "/users/profile",
@@ -14,5 +17,6 @@ export const API_ENDPOINTS = {
     datasetById: (id: string | number) => `/users/datasets/${id}`,
     publishDataset: "/users/datasets/publish",
     cleanupDatasets: "/users/datasets/cleanup",
+    aiSettings: "/users/ai-settings",
   },
 } as const;

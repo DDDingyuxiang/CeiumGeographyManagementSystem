@@ -11,6 +11,8 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AiAnalysisAssistant: typeof import('./src/components/ai/AiAnalysisAssistant.vue')['default']
+    AiReportPanel: typeof import('./src/components/ai/AiReportPanel.vue')['default']
     BufferForm: typeof import('./src/components/toolsWidget/BufferForm.vue')['default']
     CentroidForm: typeof import('./src/components/toolsWidget/CentroidForm.vue')['default']
     ContourForm: typeof import('./src/components/toolsWidget/ContourForm.vue')['default']
@@ -30,10 +32,12 @@ declare module 'vue' {
     ElForm: typeof import('element-plus/es')['ElForm']
     ElFormItem: typeof import('element-plus/es')['ElFormItem']
     ElInput: typeof import('element-plus/es')['ElInput']
+    ElOption: typeof import('element-plus/es')['ElOption']
     ElPopconfirm: typeof import('element-plus/es')['ElPopconfirm']
     ElProgress: typeof import('element-plus/es')['ElProgress']
     ElRadioButton: typeof import('element-plus/es')['ElRadioButton']
     ElRadioGroup: typeof import('element-plus/es')['ElRadioGroup']
+    ElSelect: typeof import('element-plus/es')['ElSelect']
     ElTable: typeof import('element-plus/es')['ElTable']
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
     ElTag: typeof import('element-plus/es')['ElTag']
@@ -41,6 +45,9 @@ declare module 'vue' {
     ElTree: typeof import('element-plus/es')['ElTree']
     HillshadeForm: typeof import('./src/components/toolsWidget/HillshadeForm.vue')['default']
     OverlayForm: typeof import('./src/components/toolsWidget/OverlayForm.vue')['default']
+    RasterClipMaskForm: typeof import('./src/components/toolsWidget/RasterClipMaskForm.vue')['default']
+    RasterMosaicForm: typeof import('./src/components/toolsWidget/RasterMosaicForm.vue')['default']
+    RasterResampleForm: typeof import('./src/components/toolsWidget/RasterResampleForm.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SimplifyForm: typeof import('./src/components/toolsWidget/SimplifyForm.vue')['default']
@@ -48,5 +55,8 @@ declare module 'vue' {
     ToolPanel: typeof import('./src/components/ToolPanel.vue')['default']
     WorkbenchLeftTray: typeof import('./src/components/workbench/WorkbenchLeftTray.vue')['default']
     WorkbenchRightTray: typeof import('./src/components/workbench/WorkbenchRightTray.vue')['default']
+  }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }

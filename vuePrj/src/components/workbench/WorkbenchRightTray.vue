@@ -9,6 +9,7 @@ defineProps<{
 
 const emit = defineEmits<{
   (event: "execute-tool", toolId: number): void;
+  (event: "panel-active-change", active: boolean): void;
 }>();
 
 const rightPanelActive = ref(false);
@@ -43,16 +44,19 @@ const toolCategories = ref([
     id: "general",
     title: "其他工具箱",
     tools: [
-      { name: "一键发布", desc: "自动发布WMS/WMTS服务", toolId: 30001 },
-      { name: "服务切片", desc: "预生成GeoWebCache瓦片", toolId: 30002 },
-      { name: "自动化出图", desc: "生成带图例的PDF/PNG", toolId: 30003 },
-      { name: "报表生成", desc: "统计结果生成Word/PDF", toolId: 30004 },
+      { name: "自动化出图", desc: "生成带图例的PDF/PNG", toolId: 30001 },
     ],
   },
 ]);
 
 const toggleRightPanel = () => {
   rightPanelActive.value = !rightPanelActive.value;
+  emit("panel-active-change", rightPanelActive.value);
+};
+
+const closeRightPanel = () => {
+  rightPanelActive.value = false;
+  emit("panel-active-change", false);
 };
 
 const executeTool = (toolId: number) => {
@@ -88,7 +92,7 @@ const executeTool = (toolId: number) => {
       <div class="panel-content">
         <div class="panel-header">
           <h3 class="panel-title">工具箱</h3>
-          <div class="close-btn" @click="rightPanelActive = false">×</div>
+          <div class="close-btn" @click="closeRightPanel">×</div>
         </div>
 
         <div class="panel-body">

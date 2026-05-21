@@ -9,6 +9,15 @@ const HillshadeForm = defineAsyncComponent(
   () => import("./toolsWidget/HillshadeForm.vue"),
 );
 const OverlayForm = defineAsyncComponent(() => import("./toolsWidget/OverlayForm.vue"));
+const RasterClipMaskForm = defineAsyncComponent(
+  () => import("./toolsWidget/RasterClipMaskForm.vue"),
+);
+const RasterMosaicForm = defineAsyncComponent(
+  () => import("./toolsWidget/RasterMosaicForm.vue"),
+);
+const RasterResampleForm = defineAsyncComponent(
+  () => import("./toolsWidget/RasterResampleForm.vue"),
+);
 const SimplifyForm = defineAsyncComponent(() => import("./toolsWidget/SimplifyForm.vue"));
 const SlopeAspectForm = defineAsyncComponent(
   () => import("./toolsWidget/SlopeAspectForm.vue"),
@@ -26,6 +35,9 @@ const TOOL_CONFIG: Record<number, { title: string; component: any }> = {
   10004: { title: "缓冲区分析", component: markRaw(BufferForm) },
   10005: { title: "叠加分析", component: markRaw(OverlayForm) },
   10006: { title: "质心提取", component: markRaw(CentroidForm) },
+  20001: { title: "裁剪与掩膜", component: markRaw(RasterClipMaskForm) },
+  20002: { title: "影像拼接", component: markRaw(RasterMosaicForm) },
+  20003: { title: "重采样", component: markRaw(RasterResampleForm) },
   20004: { title: "坡度/坡向", component: markRaw(SlopeAspectForm) },
   20005: { title: "等高线提取", component: markRaw(ContourForm) },
   20006: { title: "山体阴影", component: markRaw(HillshadeForm) },

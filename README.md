@@ -217,3 +217,158 @@ npm run build-only
 - Cesium、GeoServer、数据库和 Python GIS 脚本的业务链路整合。
 - 矢量工具箱已支持要素简化、缓冲区、叠加分析和质心提取。
 - 地图图层支持右键移除与缩放至范围。
+
+## 9. AI 智能分析扩展
+
+项目新增了 AI GIS 智能分析助手的基础工程结构，用于将用户的自然语言需求转换为可执行的空间分析计划。该能力不是简单聊天框，而是围绕现有 `analysisService.ts` 中的 GIS 工具做受控任务编排。
+
+### 9.1 设计目标
+
+- 让用户用自然语言描述空间分析需求。
+- AI 只允许选择系统已有的 GIS 工具，不允许编造工具。
+- AI 只允许选择当前用户已有的数据图层，不允许编造 `assetId`。
+- AI 输出结构化 JSON 分析计划，由前端展示给用户确认后再执行。
+- 后端对 AI 返回结果做二次校验，避免错误参数直接进入分析链路。
+- 用户可以在设置页配置自己的模型名称、Base URL 和 API Key。
+
+### 9.2 后端新增文件
+
+```text
+expreePrj/src/ai/
+├── toolCatalog.ts
+├── promptBuilder.ts
+├── aiPlanningService.ts
+└── resultExplainService.ts
+
+expreePrj/src/controllers/aiController.ts
+expreePrj/src/routes/aiRoutes.ts
+```
+
+文件职责：
+
+- `toolCatalog.ts`：维护 AI 可使用的 GIS 工具目录，包括 `toolId`、工具名称、别名、输入数据类型、输出类型、参数定义、规则和示例。
+- `promptBuilder.ts`：集中生成 AI prompt，包括系统角色、工具目录、图层上下文和严格 JSON 输出格式。
+- `aiPlanningService.ts`：定义 AI 分析计划的数据结构，提供 prompt payload 生成、AI JSON 解析和后端校验逻辑。
+- `resultExplainService.ts`：预留给后续“AI 分析报告生成”能力。
+- `aiController.ts`：预留 AI 接口控制器，用于处理自然语言规划和结果解释请求。
+- `aiRoutes.ts`：预留 AI 路由文件，用于挂载 `/api/ai/plan` 等接口。
+
+### 9.3 AI 工具目录
+
+当前 AI 规划层支持以下已有 GIS 工具：
+
+| toolId | 工具 | 数据类型 | 主要参数 |
+| --- | --- | --- | --- |
+| `10003` | 要素简化 | vector | `tolerance`, `preserveTopology` |
+| `10004` | 缓冲区分析 | vector | `radius` |
+| `10005` | 叠加分析 | vector | `overlayAssetId`, `operation` |
+| `10006` | 质心提取 | vector | `mode` |
+| `20004` | 坡度坡向分析 | raster | `analysisType`, `zFactor`, `scale` |
+| `20005` | 等高线提取 | raster | `interval`, `base` |
+| `20006` | 山体阴影 | raster | `azimuth`, `altitude`, `zFactor` |
+
+### 9.4 AI 输出格式
+
+AI 必须返回合法 JSON，格式如下：
+
+```json
+{
+  "summary": "对道路图层执行 500 米缓冲区分析",
+  "needsClarification": false,
+  "clarificationQuestion": "",
+  "steps": [
+    {
+      "toolId": 10004,
+      "assetId": "真实的数据资产 ID",
+      "params": {
+        "radius": 500
+      },
+      "reason": "用户要求生成道路 500 米影响范围"
+    }
+  ],
+  "warnings": []
+}
+```
+
+如果用户信息不足，例如没有说明缓冲距离，应返回：
+
+```json
+{
+  "summary": "",
+  "needsClarification": true,
+  "clarificationQuestion": "请问缓冲区距离是多少米？",
+  "steps": [],
+  "warnings": ["缺少缓冲区距离参数"]
+}
+```
+
+### 9.5 模型配置
+
+项目在设置页增加了 AI 模型配置能力，用户可以配置自己的模型服务：
+
+- 模型服务：`OpenAI Compatible`、`OpenAI`、`DashScope` 或自定义服务。
+- Base URL：模型服务地址，例如 `https://api.openai.com/v1`。
+- 模型名称：例如 `gpt-4o-mini`、`qwen-plus`、`deepseek-chat`。
+- API Key：用户自己的模型密钥。
+
+相关接口：
+
+```text
+GET /api/users/ai-settings
+PUT /api/users/ai-settings
+```
+
+安全说明：
+
+- 后端保存 API Key 时目前存储在 MongoDB 用户文档的 `aiSettings.apiKey` 字段中。
+- 查询设置时不会返回完整 API Key，只返回 `hasApiKey` 和 `maskedApiKey`。
+- 课程项目和简历演示可以使用该方案；生产环境建议改为服务端加密存储或接入密钥管理服务。
+
+### 9.6 前端新增文件
+
+```text
+vuePrj/src/api/ai.ts
+vuePrj/src/types/ai.ts
+vuePrj/src/components/ai/AiAnalysisAssistant.vue
+vuePrj/src/components/ai/AiReportPanel.vue
+```
+
+文件职责：
+
+- `api/ai.ts`：预留 AI 接口请求封装。
+- `types/ai.ts`：预留 AI 分析计划、步骤、警告和报告相关类型。
+- `AiAnalysisAssistant.vue`：预留工作台内的自然语言 GIS 助手组件。
+- `AiReportPanel.vue`：预留 AI 分析报告展示组件。
+
+设置页已接入：
+
+```text
+vuePrj/src/views/settings.vue
+```
+
+### 9.7 推荐后续接入流程
+
+1. 在 `aiController.ts` 中实现 `POST /api/ai/plan`。
+2. 从 `DataAsset` 查询当前用户可用图层。
+3. 调用 `createPlanningPromptPayload()` 生成模型请求消息。
+4. 调用用户在设置页保存的模型服务。
+5. 用 `parseAiPlanJson()` 解析模型输出。
+6. 用 `validateAiAnalysisPlan()` 做后端二次校验。
+7. 前端 `AiAnalysisAssistant.vue` 展示计划，用户确认后复用现有 `/api/analysis/task` 执行。
+8. 执行结果继续通过 GeoServer 发布，并由 Cesium 回显。
+
+### 9.8 验证命令
+
+后端：
+
+```bash
+cd expreePrj
+pnpm run build
+```
+
+前端：
+
+```bash
+cd vuePrj
+pnpm run type-check
+```

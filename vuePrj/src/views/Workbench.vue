@@ -6,6 +6,7 @@ import { useRouter } from "vue-router";
 import ToolPanel from "@/components/ToolPanel.vue";
 import WorkbenchLeftTray from "@/components/workbench/WorkbenchLeftTray.vue";
 import WorkbenchRightTray from "@/components/workbench/WorkbenchRightTray.vue";
+import AiAnalysisAssistant from "@/components/ai/AiAnalysisAssistant.vue";
 import emitter, { type AnalysisLayerPayload } from "@/utils/bus";
 
 export interface WorkbenchLayerItem {
@@ -39,6 +40,7 @@ Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ACCESSTOKEN;
 const router = useRouter();
 const isDragging = ref(false);
 const activeToolId = ref<number | null>(null);
+const rightToolPanelActive = ref(false);
 const leftTrayRef = ref<{ handleDropOnMap: () => Promise<void> } | null>(null);
 const loadedLayers = ref<WorkbenchLayerItem[]>([
   {
@@ -193,7 +195,7 @@ const addWmsLayer = async (payload: AnalysisLayerPayload) => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   viewer = new Cesium.Viewer("cesiumContainer", {
     infoBox: false,
     selectionIndicator: false,
@@ -211,6 +213,10 @@ onMounted(() => {
         credit: "高德影像路网",
       }),
     ),
+    terrainProvider: await Cesium.createWorldTerrainAsync({
+    requestVertexNormals: true,
+    requestWaterMask: true,
+  }),
   });
 
   (viewer.cesiumWidget.creditContainer as HTMLElement).style.display = "none";
@@ -378,11 +384,16 @@ const zoomOut = () => {
         <WorkbenchRightTray
           :loaded-layers="loadedLayers"
           @execute-tool="executeTool"
+          @panel-active-change="rightToolPanelActive = $event"
         />
         <ToolPanel
           :tool-id="activeToolId"
           :loaded-layers="loadedLayers"
           @close="activeToolId = null"
+        />
+        <AiAnalysisAssistant
+          :loaded-layers="loadedLayers"
+          :hide-launcher="rightToolPanelActive"
         />
       </main>
     </div>

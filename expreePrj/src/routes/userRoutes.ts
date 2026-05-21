@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { getUserProfile, updateUserProfile } from '../controllers/userController.js';
+import {
+  getAiSettings,
+  getUserProfile,
+  updateAiSettings,
+  updateUserProfile,
+} from '../controllers/userController.js';
 import { verifyToken } from '../middleware/auth.js';
 import { uploadAssets,getMyAssets ,deleteAsset,publishData,cleanupResources} from '../controllers/dataController.js';
 import { uploadData } from '../middleware/dataUpload.js';
@@ -9,6 +14,8 @@ const router:Router = Router();
 
 router.get('/profile',verifyToken,getUserProfile)
 router.put('/profile',verifyToken,uploadAvatar.single('avatar'),updateUserProfile)
+router.get('/ai-settings',verifyToken,getAiSettings)
+router.put('/ai-settings',verifyToken,updateAiSettings)
 
 router.post('/upload-data',verifyToken,uploadData.single('file'),uploadAssets);
 router.get('/datasets',verifyToken,getMyAssets);
