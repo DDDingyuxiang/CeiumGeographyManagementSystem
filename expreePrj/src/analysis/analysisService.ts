@@ -40,6 +40,10 @@ export const dispatchTask = async (
       return runContourTool20005(asset, params, workspace);
     case 20006:
       return runHillshadeTool20006(asset, params, workspace);
+    case 20007:
+      return runNdviTool20007(asset, params, workspace);
+    case 20008:
+      return runBandCompositeTool20008(asset, params, workspace);
     default:
       throw new Error(`Unsupported toolId: ${toolId}`);
   }
@@ -411,6 +415,112 @@ async function runRasterResampleTool20003(
 
   return {
     layerName: `${asset.name}_resampled`,
+    ...(await publishCoverageStore(workspace, storeName, outputPath)),
+  };
+}
+
+async function runNdviTool20007(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  await ensureWorkspace(workspace);
+
+  const inputPath = prepareRasterInput(asset);
+  const redBand = Number(params.redBand ?? 3);
+  const nirBand = Number(params.nirBand ?? 4);
+  const nodata = params.nodata === undefined || params.nodata === "" ? -9999 : Number(params.nodata);
+
+  if (!Number.isInteger(redBand) || redBand <= 0) {
+    throw new Error("Red band index must be a positive integer.");
+  }
+
+  if (!Number.isInteger(nirBand) || nirBand <= 0) {
+    throw new Error("NIR band index must be a positive integer.");
+  }
+
+  if (redBand === nirBand) {
+    throw new Error("Red band and NIR band must be different.");
+  }
+
+  if (!Number.isFinite(nodata)) {
+    throw new Error("NoData value must be a valid number.");
+  }
+
+  const timestamp = Date.now();
+  const storeName = `ndvi_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const outputPath = path.join(outDir, `${storeName}.tif`);
+  const pythonScript = getAnalysisPythonScript("runNdvi.py");
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${outputPath}" ` +
+    `${redBand} ${nirBand} ${nodata}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error(`Output raster file not found: ${outputPath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_ndvi`,
+    ...(await publishCoverageStore(workspace, storeName, outputPath)),
+  };
+}
+
+async function runBandCompositeTool20008(
+  asset: any,
+  params: Record<string, unknown>,
+  workspace: string,
+) {
+  await ensureWorkspace(workspace);
+
+  const inputPath = prepareRasterInput(asset);
+  const redBand = Number(params.redBand ?? 3);
+  const greenBand = Number(params.greenBand ?? 2);
+  const blueBand = Number(params.blueBand ?? 1);
+  const stretch = String(params.stretch ?? "percent").toLowerCase();
+  const nodata = params.nodata === undefined || params.nodata === "" ? "none" : Number(params.nodata);
+
+  for (const [name, value] of [
+    ["redBand", redBand],
+    ["greenBand", greenBand],
+    ["blueBand", blueBand],
+  ] as const) {
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new Error(`${name} must be a positive integer.`);
+    }
+  }
+
+  if (!["none", "minmax", "percent"].includes(stretch)) {
+    throw new Error("Stretch method must be none, minmax, or percent.");
+  }
+
+  if (nodata !== "none" && !Number.isFinite(nodata)) {
+    throw new Error("NoData value must be a valid number.");
+  }
+
+  const timestamp = Date.now();
+  const storeName = `bands_${asset._id.toString().slice(-5)}_${timestamp}`;
+  const outDir = path.join(tempAnalysisRoot, storeName);
+  const outputPath = path.join(outDir, `${storeName}.tif`);
+  const pythonScript = getAnalysisPythonScript("runBandComposite.py");
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const command =
+    `"${PYTHON_PATH}" -u "${pythonScript}" "${inputPath}" "${outputPath}" ` +
+    `${redBand} ${greenBand} ${blueBand} ${stretch} ${nodata}`;
+  await runPythonCommand(command);
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error(`Output raster file not found: ${outputPath}`);
+  }
+
+  return {
+    layerName: `${asset.name}_composite`,
     ...(await publishCoverageStore(workspace, storeName, outputPath)),
   };
 }

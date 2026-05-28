@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as Cesium from "cesium";
 import { computed, defineAsyncComponent, markRaw } from "vue";
 import type { WorkbenchLayerItem } from "@/views/Workbench.vue";
 
@@ -9,6 +10,9 @@ const HillshadeForm = defineAsyncComponent(
   () => import("./toolsWidget/HillshadeForm.vue"),
 );
 const OverlayForm = defineAsyncComponent(() => import("./toolsWidget/OverlayForm.vue"));
+const RasterBandCompositeForm = defineAsyncComponent(
+  () => import("./toolsWidget/RasterBandCompositeForm.vue"),
+);
 const RasterClipMaskForm = defineAsyncComponent(
   () => import("./toolsWidget/RasterClipMaskForm.vue"),
 );
@@ -18,17 +22,28 @@ const RasterMosaicForm = defineAsyncComponent(
 const RasterResampleForm = defineAsyncComponent(
   () => import("./toolsWidget/RasterResampleForm.vue"),
 );
+const RasterNdviForm = defineAsyncComponent(() => import("./toolsWidget/RasterNdviForm.vue"));
 const SimplifyForm = defineAsyncComponent(() => import("./toolsWidget/SimplifyForm.vue"));
 const SlopeAspectForm = defineAsyncComponent(
   () => import("./toolsWidget/SlopeAspectForm.vue"),
 );
+const CreateGeometryForm = defineAsyncComponent(
+  () => import("./toolsWidget/CreateGeometryForm.vue"),
+);
+const SceneCreateForm = defineAsyncComponent(
+  () => import("./toolsWidget/SceneCreateForm.vue"),
+);
 
 const props = defineProps<{
   toolId: number | null;
+  viewer: Cesium.Viewer | null;
   loadedLayers: WorkbenchLayerItem[];
 }>();
 
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{
+  (event: "close"): void;
+  (event: "add-drawing-layer", layer: WorkbenchLayerItem): void;
+}>();
 
 const TOOL_CONFIG: Record<number, { title: string; component: any }> = {
   10003: { title: "要素简化", component: markRaw(SimplifyForm) },
@@ -41,6 +56,10 @@ const TOOL_CONFIG: Record<number, { title: string; component: any }> = {
   20004: { title: "坡度/坡向", component: markRaw(SlopeAspectForm) },
   20005: { title: "等高线提取", component: markRaw(ContourForm) },
   20006: { title: "山体阴影", component: markRaw(HillshadeForm) },
+  20007: { title: "植被指数(NDVI)", component: markRaw(RasterNdviForm) },
+  20008: { title: "波段组合", component: markRaw(RasterBandCompositeForm) },
+  30001: { title: "创建要素", component: markRaw(CreateGeometryForm) },
+  30002: { title: "场景创建", component: markRaw(SceneCreateForm) },
 };
 
 const currentConfig = computed(() => {
@@ -49,6 +68,10 @@ const currentConfig = computed(() => {
 
 const handleClose = () => {
   emit("close");
+};
+
+const handleAddDrawingLayer = (layer: WorkbenchLayerItem) => {
+  emit("add-drawing-layer", layer);
 };
 </script>
 
@@ -60,7 +83,12 @@ const handleClose = () => {
         <div class="close-icon" @click="handleClose">×</div>
       </div>
       <div class="tool-panel-body">
-        <component :is="currentConfig.component" :loaded-layers="loadedLayers" />
+        <component
+          :is="currentConfig.component"
+          :loaded-layers="loadedLayers"
+          :viewer="viewer"
+          @add-drawing-layer="handleAddDrawingLayer"
+        />
       </div>
     </div>
   </transition>
@@ -69,15 +97,15 @@ const handleClose = () => {
 <style scoped>
 .tool-panel-wrapper {
   position: absolute;
-  top: 80px;
-  right: 340px;
-  width: 280px;
+  top: 70px;
+  right: 20px;
+  width: 300px;
   background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  z-index: 1000;
+  z-index: 90;
 }
 
 .tool-panel-header {
@@ -100,6 +128,10 @@ const handleClose = () => {
   font-size: 20px;
 }
 
+.close-icon:hover {
+  color: #f87171;
+}
+
 .tool-panel-body {
   padding: 16px;
   color: #cbd5e1;
@@ -113,6 +145,14 @@ const handleClose = () => {
 .panel-fade-enter-from,
 .panel-fade-leave-to {
   opacity: 0;
-  transform: translateX(20px);
+  transform: translateX(80px);
+}
+
+@media (max-width: 760px) {
+  .tool-panel-wrapper {
+    top: 68px;
+    right: 12px;
+    width: min(300px, calc(100vw - 24px));
+  }
 }
 </style>

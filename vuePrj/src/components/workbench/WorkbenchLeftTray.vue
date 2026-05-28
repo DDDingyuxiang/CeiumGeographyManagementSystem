@@ -134,6 +134,8 @@ const toggleLayerVisibility = (data: LayerItem) => {
     baseLayer.show = nextVisible;
   } else if (data.cesiumLayer) {
     data.cesiumLayer.show = nextVisible;
+  } else if (data.dataSource) {
+    data.dataSource.show = nextVisible;
   }
 
   updateLayers(
@@ -166,6 +168,10 @@ const removeLayer = (data: LayerItem | null = contextMenu.value.layer) => {
     return;
   }
 
+  if (data.dataSource) {
+    props.viewer.dataSources.remove(data.dataSource, true);
+  }
+
   const nextLayers = props.layers.filter((layer) => layer.id !== data.id);
   syncImageryLayers(nextLayers);
   updateLayers(nextLayers);
@@ -180,6 +186,13 @@ const zoomToLayer = (data: LayerItem | null = contextMenu.value.layer) => {
   }
 
   const currentLayer = props.layers.find((layer) => layer.id === data.id) ?? data;
+
+  if (currentLayer.dataSource) {
+    props.viewer.flyTo(currentLayer.dataSource, {
+      duration: 0.8,
+    });
+    return;
+  }
 
   if (currentLayer.bounds) {
     const [west, south, east, north] = currentLayer.bounds;

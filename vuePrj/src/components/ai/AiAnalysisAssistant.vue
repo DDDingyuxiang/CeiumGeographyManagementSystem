@@ -151,6 +151,8 @@ const toolLabels: Record<number, string> = {
   20004: "坡度坡向分析",
   20005: "等高线提取",
   20006: "山体阴影",
+  20007: "植被指数(NDVI)",
+  20008: "波段组合",
 };
 
 const togglePanel = () => {
@@ -178,7 +180,9 @@ const inferStyleKind = (step: AiPlanStep): "contour" | "point" | "polygon" | und
 };
 
 const inferResultType = (step: AiPlanStep): string => {
-  if ([20001, 20002, 20003, 20004, 20006].includes(step.toolId)) return "raster";
+  if ([20001, 20002, 20003, 20004, 20006, 20007, 20008].includes(step.toolId)) {
+    return "raster";
+  }
   return "vector";
 };
 

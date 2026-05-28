@@ -14,6 +14,7 @@ export interface WorkbenchLayerItem {
   label: string;
   visible: boolean;
   cesiumLayer: Cesium.ImageryLayer | null;
+  dataSource?: Cesium.CustomDataSource | null;
   type: string;
   assetId?: string;
   wmsUrl?: string;
@@ -53,6 +54,10 @@ const loadedLayers = ref<WorkbenchLayerItem[]>([
 ]);
 
 let viewer: Cesium.Viewer | null = null;
+
+const addDrawingLayer = (layer: WorkbenchLayerItem) => {
+  loadedLayers.value = [...loadedLayers.value, layer];
+};
 
 const buildContourSld = (layerName: string) => `
 <StyledLayerDescriptor version="1.0.0"
@@ -256,6 +261,13 @@ const executeTool = (toolId: number) => {
   activeToolId.value = toolId;
 };
 
+const handleRightPanelActiveChange = (active: boolean) => {
+  rightToolPanelActive.value = active;
+  if (active) {
+    activeToolId.value = null;
+  }
+};
+
 const getZoomAmount = () => {
   if (!viewer) {
     return 1000;
@@ -384,16 +396,18 @@ const zoomOut = () => {
         <WorkbenchRightTray
           :loaded-layers="loadedLayers"
           @execute-tool="executeTool"
-          @panel-active-change="rightToolPanelActive = $event"
+          @panel-active-change="handleRightPanelActiveChange"
         />
         <ToolPanel
           :tool-id="activeToolId"
+          :viewer="viewer"
           :loaded-layers="loadedLayers"
+          @add-drawing-layer="addDrawingLayer"
           @close="activeToolId = null"
         />
         <AiAnalysisAssistant
           :loaded-layers="loadedLayers"
-          :hide-launcher="rightToolPanelActive"
+          :hide-launcher="rightToolPanelActive || activeToolId !== null"
         />
       </main>
     </div>

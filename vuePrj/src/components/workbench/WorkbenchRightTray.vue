@@ -44,7 +44,8 @@ const toolCategories = ref([
     id: "general",
     title: "其他工具箱",
     tools: [
-      { name: "自动化出图", desc: "生成带图例的PDF/PNG", toolId: 30001 },
+      { name: "创建几何", desc: "手动绘制矢量要素", toolId: 30001 },
+      { name: "场景创建", desc: "创建3D场景", toolId: 30002 },
     ],
   },
 ]);
@@ -60,6 +61,7 @@ const closeRightPanel = () => {
 };
 
 const executeTool = (toolId: number) => {
+  closeRightPanel();
   emit("execute-tool", toolId);
 };
 </script>
