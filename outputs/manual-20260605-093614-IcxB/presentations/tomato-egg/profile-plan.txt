@@ -1,0 +1,24 @@
+﻿Task Mode: create
+Primary Deck Profile: consumer-retail
+Secondary Profile Gates: none
+
+Required Proof Objects:
+- Hero food photography / generated imagery of tomato scrambled eggs
+- Ingredient layout with visual grouping
+- Step-by-step cooking sequence with process visuals
+- Final plated dish presentation
+
+Source/Asset Requirements:
+- Generated food imagery via imagegen tool
+- Chinese typography support
+
+Brand Authenticity Constraints:
+- No brand marks needed - this is a recipe tutorial deck
+- Food imagery should be warm, appetizing, editorial quality
+
+Profile-Specific QA Gates:
+- consumer-retail: real assets or explicit asset provenance, image quality, editorial hierarchy
+- Food imagery must look appetizing and professional
+- Typography must support Chinese characters
+
+Known Missing Inputs: none - all content generated from recipe knowledge

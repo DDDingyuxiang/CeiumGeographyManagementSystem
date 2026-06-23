@@ -1,0 +1,21 @@
+﻿Contact Sheet Plan - 10 Slides, 6 Distinct Macro Layouts
+
+1. COVER: Full-bleed hero image with bold title overlay
+2. WHY: Split layout - flavor diagram left, benefit text right
+3. INGREDIENTS: 2x3 ingredient grid with visual icons/photos
+4. PREP: Side-by-side prep comparison layout
+5. STEP 1: Left-to-right process timeline with action images
+6. STEP 2: Left-to-right process timeline with action images (variant)
+7. STEP 3: Central combination diagram with callouts
+8. TIPS: 2x2 tip card grid
+9. PLATING: Full-bleed hero image with minimal text overlay
+10. CLOSING: Centered text with warm background accent
+
+Layout Rhythm:
+- Slides 1,9: Full-bleed heroes (bookend pattern)
+- Slides 2,8: Split/grid information layouts
+- Slides 5,6,7: Process sequence trio (varied compositions)
+- Slides 3,4: Ingredient/prep layouts
+- Slide 10: Clean closing
+
+No 3 consecutive slides share the same macro layout.

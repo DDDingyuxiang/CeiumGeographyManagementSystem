@@ -14,7 +14,7 @@ export interface WorkbenchLayerItem {
   label: string;
   visible: boolean;
   cesiumLayer: Cesium.ImageryLayer | null;
-  dataSource?: Cesium.CustomDataSource | null;
+  dataSource?: Cesium.DataSource | null;
   type: string;
   assetId?: string;
   wmsUrl?: string;
@@ -218,10 +218,10 @@ onMounted(async () => {
         credit: "高德影像路网",
       }),
     ),
-    terrainProvider: await Cesium.createWorldTerrainAsync({
-    requestVertexNormals: true,
-    requestWaterMask: true,
-  }),
+  //   terrainProvider: await Cesium.createWorldTerrainAsync({
+  //   requestVertexNormals: true,
+  //   requestWaterMask: true,
+  // }),
   });
 
   (viewer.cesiumWidget.creditContainer as HTMLElement).style.display = "none";

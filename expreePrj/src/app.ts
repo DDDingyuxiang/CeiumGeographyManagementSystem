@@ -58,21 +58,22 @@ mongoose
 
 startExtractedFilesCleanupJob();
 
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/analysis", analysisRoutes);
+app.use("/api/ai", aiRoutes);
+
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof Error) {
     return res.status(400).json({
+      code: 400,
       status: "error",
       message: err.message,
     });
   }
 
-  res.status(500).json({ message: "内部错误" });
+  res.status(500).json({ code: 500, message: "内部错误" });
 });
-
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/analysis", analysisRoutes);
-app.use("/api/ai", aiRoutes);
 
 app.listen(port || 3000, () => {
   console.log("服务启动中");

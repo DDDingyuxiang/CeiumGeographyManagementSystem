@@ -6,7 +6,15 @@ import {
   updateUserProfile,
 } from '../controllers/userController.js';
 import { verifyToken } from '../middleware/auth.js';
-import { uploadAssets,getMyAssets ,deleteAsset,publishData,cleanupResources} from '../controllers/dataController.js';
+import {
+  cleanupResources,
+  deleteAsset,
+  getAssetFile,
+  getMyAssets,
+  publishData,
+  saveCzmlAsset,
+  uploadAssets,
+} from '../controllers/dataController.js';
 import { uploadData } from '../middleware/dataUpload.js';
 import { uploadAvatar } from '../middleware/upload.js';
 
@@ -19,6 +27,8 @@ router.put('/ai-settings',verifyToken,updateAiSettings)
 
 router.post('/upload-data',verifyToken,uploadData.single('file'),uploadAssets);
 router.get('/datasets',verifyToken,getMyAssets);
+router.get('/assets/:id/file',verifyToken,getAssetFile);
+router.post('/datasets/czml',verifyToken,saveCzmlAsset);
 router.delete('/datasets/:id',verifyToken,deleteAsset);
 router.post('/datasets/publish',verifyToken,publishData);
 router.post('/datasets/cleanup',cleanupResources);

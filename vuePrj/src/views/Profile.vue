@@ -200,6 +200,8 @@
                 <el-radio-button value="all">全部</el-radio-button>
                 <el-radio-button value="vector">矢量</el-radio-button>
                 <el-radio-button value="raster">栅格</el-radio-button>
+                <el-radio-button value="glb">模型</el-radio-button>
+                <el-radio-button value="czml">场景</el-radio-button>
               </el-radio-group>
               <el-button
                 type="primary"
@@ -224,7 +226,7 @@
                 ref="fileInputRef"
                 type="file"
                 multiple
-                accept=".shp,.shx,.dbf,.prj,.cpg,.json,.geojson,.tif,.tiff"
+                accept=".shp,.shx,.dbf,.prj,.cpg,.json,.geojson,.tif,.tiff,.glb,.czml"
                 style="display: none"
                 @change="handleFileAdd"
               />
@@ -267,6 +269,26 @@
                     <line x1="9" y1="3" x2="9" y2="21" />
                     <line x1="15" y1="3" x2="15" y2="21" />
                   </svg>
+                  <svg
+                    v-else-if="row.type === 'glb'"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                  >
+                    <path d="M12 2 4 6v8l8 4 8-4V6l-8-4z" />
+                    <path d="M12 10 4 6M12 10l8-4M12 10v8" />
+                  </svg>
+                  <svg
+                    v-else
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                  >
+                    <path d="M4 5h16M4 19h16M7 5v14M17 5v14" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
                 </div>
               </template>
             </el-table-column>
@@ -282,11 +304,11 @@
             <el-table-column label="数据类型" width="100" align="center">
               <template #default="{ row }">
                 <el-tag
-                  :type="row.type === 'vector' ? 'success' : 'warning'"
+                  :type="getTypeTag(row.type)"
                   size="small"
                   class="type-tag"
                 >
-                  {{ row.type === "vector" ? "矢量" : "栅格" }}
+                  {{ getTypeLabel(row.type) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -590,7 +612,7 @@ const storagePercent = computed(() =>
 interface DataItem {
   id: number;
   name: string;
-  type: "vector" | "raster";
+  type: "vector" | "raster" | "glb" | "czml";
   size: string;
   uploadDate: string;
 }
@@ -664,6 +686,23 @@ const filteredList = computed(() => {
   if (activeFilter.value === "all") return dataList.value;
   return dataList.value.filter((d) => d.type === activeFilter.value);
 });
+
+function getTypeLabel(type: DataItem["type"]) {
+  const labels: Record<DataItem["type"], string> = {
+    vector: "矢量",
+    raster: "栅格",
+    glb: "模型",
+    czml: "场景",
+  };
+  return labels[type] ?? "数据";
+}
+
+function getTypeTag(type: DataItem["type"]) {
+  if (type === "vector") return "success";
+  if (type === "raster") return "warning";
+  if (type === "glb") return "primary";
+  return "info";
+}
 
 // ==================== 操作：查看 ====================
 function viewData(row: DataItem) {
@@ -905,7 +944,7 @@ async function processUpload(files: File[]) {
 
   let uploadFile: File | Blob;
   let uploadFileName: string;
-  let fileType: "vector" | "raster" | null = null;
+  let fileType: DataItem["type"] | null = null;
 
   try {
     // ========== 场景1: 多文件 SHP（打包为ZIP） ==========
@@ -947,11 +986,15 @@ async function processUpload(files: File[]) {
         fileType = "vector";
       } else if (ext && rasterExts.includes(ext)) {
         fileType = "raster";
+      } else if (ext === "glb") {
+        fileType = "glb";
+      } else if (ext === "czml") {
+        fileType = "czml";
       } else if (ext && shpExts.includes(ext)) {
         // 单个SHP文件，后端会检查完整性
         fileType = "vector";
       } else {
-        ElMessage.warning("不支持该文件格式，请上传矢量或栅格数据");
+        ElMessage.warning("不支持该文件格式，请上传矢量、栅格、GLB 模型或 CZML 场景");
         return;
       }
 
@@ -1447,6 +1490,14 @@ async function processUpload(files: File[]) {
 .type-icon-wrap.raster {
   background: rgba(234, 179, 8, 0.12);
   color: #facc15;
+}
+.type-icon-wrap.glb {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+.type-icon-wrap.czml {
+  background: rgba(20, 184, 166, 0.12);
+  color: #5eead4;
 }
 
 .data-name-cell {

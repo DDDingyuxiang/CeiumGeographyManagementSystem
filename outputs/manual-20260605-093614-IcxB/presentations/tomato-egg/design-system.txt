@@ -1,0 +1,47 @@
+﻿Slide Size: 1280x720
+
+Background System:
+- Warm cream (#FFF8F0) base with subtle food-inspired accents
+- Deep tomato red (#E74C3C) for hero/cover sections
+- Rich egg yolk yellow (#F1C40F) for accent elements
+
+Typography Pair:
+- Title: Microsoft YaHei Bold (Chinese display)
+- Body: Microsoft YaHei Regular (Chinese body)
+- English accent: system sans-serif fallback
+
+Color Palette:
+- Primary: #E74C3C (Tomato Red) - titles, accents, hero backgrounds
+- Secondary: #F1C40F (Egg Yolk Yellow) - highlights, callouts, decorative elements
+- Neutral: #2C3E50 (Dark Charcoal) - body text, labels
+- Base: #FFF8F0 (Warm Cream) - slide backgrounds
+- Support: #E67E22 (Warm Orange) - secondary accents, transitions
+
+Chart Grammar:
+- Warm-toned data visualization
+- Rounded shapes for food-friendly feel
+- Direct labels over legends
+
+Container Grammar:
+- Rounded corners (8-12px) for food-friendly containers
+- Soft shadows for depth
+- Warm-toned borders
+
+Title/Kicker Grammar:
+- Kicker: 3-word max, all-caps, tomato red accent
+- Title: Large, bold, Chinese-first with warm accent color
+- Subtitle: Lighter weight, supporting detail
+
+Allowed Layout Families:
+- Full-bleed hero images
+- Split image/text layouts
+- Step sequence timelines
+- Ingredient grid layouts
+- Tip callout cards
+- Process flow diagrams
+
+Banned Motifs:
+- Cold corporate blues
+- Sharp geometric patterns
+- Minimalist white-only layouts
+- Generic stock photo borders

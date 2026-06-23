@@ -77,7 +77,11 @@ const handleAddDrawingLayer = (layer: WorkbenchLayerItem) => {
 
 <template>
   <transition name="panel-fade">
-    <div v-if="currentConfig" class="tool-panel-wrapper">
+    <div
+      v-if="currentConfig"
+      class="tool-panel-wrapper"
+      :class="{ 'scene-panel': toolId === 30002 }"
+    >
       <div class="tool-panel-header">
         <span class="title">{{ currentConfig.title }}</span>
         <div class="close-icon" @click="handleClose">×</div>
@@ -106,6 +110,10 @@ const handleAddDrawingLayer = (layer: WorkbenchLayerItem) => {
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
   z-index: 90;
+}
+
+.tool-panel-wrapper.scene-panel {
+  width: 420px;
 }
 
 .tool-panel-header {

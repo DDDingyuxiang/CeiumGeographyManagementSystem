@@ -1,0 +1,15 @@
+﻿Thesis: 番茄炒蛋是一道简单却美味的家常菜，掌握关键步骤就能做出餐厅级水准
+Audience: 家庭烹饪爱好者、厨房新手
+Arc: 从食材准备到完美出锅，7步做出经典番茄炒蛋
+
+Slide List:
+1. Cover - 番茄炒蛋：经典家常美味 / Hero food image / 开篇定调
+2. WHY - 为什么人人都爱番茄炒蛋 / Flavor profile diagram / 营养与美味的完美平衡
+3. INGREDIENTS - 食材清单 / Visual ingredient grid / 食材分组展示
+4. PREP - 食材处理 / Prep layout comparison / 番茄切法与蛋液调配
+5. STEP 1 - 炒蛋 / Process sequence / 蛋液下锅的关键时机
+6. STEP 2 - 炒番茄 / Process sequence / 番茄出汁的秘诀
+7. STEP 3 - 合炒调味 / Process combination / 最终融合与调味
+8. TIPS - 大厨秘诀 / Tip callouts / 进阶技巧提升
+9. PLATING - 完美出锅 / Hero plating image / 成品展示与摆盘
+10. CLOSING - 享受美食 / Closing statement / 温馨收尾

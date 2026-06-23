@@ -12,10 +12,67 @@ const userWorkspace = "user_data_space";
 const extractedRoot = path.join(process.cwd(), "uploads", "extracted");
 const geoserverDataRoot = path.join(process.cwd(), "geoserver_data");
 const tempAnalysisRoot = path.join(geoserverDataRoot, "temp_analysis");
+const uploadsDataRoot = path.join(process.cwd(), "uploads", "data");
 
 const ensureDirectory = (targetPath: string) => {
   fs.mkdirSync(targetPath, { recursive: true });
 };
+
+const getAssetTypeFromExtension = (filename: string, requestedType?: string) => {
+  const ext = path.extname(filename).toLowerCase();
+
+  if (ext === ".glb") {
+    return "glb";
+  }
+
+  if (ext === ".czml") {
+    return "czml";
+  }
+
+  if (ext === ".tif" || ext === ".tiff") {
+    return "raster";
+  }
+
+  if (
+    ext === ".geojson" ||
+    ext === ".json" ||
+    ext === ".zip" ||
+    [".shp", ".shx", ".dbf", ".prj", ".cpg", ".sbn", ".sbx"].includes(ext)
+  ) {
+    return "vector";
+  }
+
+  return requestedType || ext.replace(".", "");
+};
+
+const assertGlbFile = (filePath: string) => {
+  const fd = fs.openSync(filePath, "r");
+  const magic = Buffer.alloc(4);
+
+  try {
+    fs.readSync(fd, magic, 0, 4, 0);
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  if (magic.toString("utf-8") !== "glTF") {
+    throw new Error("GLB 文件校验失败：文件头不是 glTF");
+  }
+};
+
+const assertPathInUploads = (assetPath: string) => {
+  const resolvedRoot = path.resolve(uploadsDataRoot);
+  const resolvedPath = path.resolve(assetPath);
+  const relative = path.relative(resolvedRoot, resolvedPath);
+
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("资产路径非法");
+  }
+
+  return resolvedPath;
+};
+
+const buildAssetFileUrl = (assetId: string) => `/api/users/assets/${assetId}/file`;
 
 const sanitizeName = (value: string) =>
   value
@@ -205,7 +262,12 @@ export const uploadAssets = async (req: Request, res: Response) => {
     }
 
     const userId = (req as any).user.id;
-    const type = req.body.type;
+    const type = getAssetTypeFromExtension(req.file.originalname, req.body.type);
+
+    if (type === "glb") {
+      assertGlbFile(req.file.path);
+    }
+
     const newAsset = new DataAsset({
       userId,
       name: req.file.originalname,
@@ -216,9 +278,23 @@ export const uploadAssets = async (req: Request, res: Response) => {
     });
 
     await newAsset.save();
-    res.status(200).json({ code: 200, message: "数据上传成功", data: newAsset });
-  } catch (error) {
-    res.status(500).json({ code: 500, message: "服务器存储数据失败" });
+    res.status(200).json({
+      code: 200,
+      message: "数据上传成功",
+      data: {
+        ...newAsset.toObject(),
+        fileUrl: buildAssetFileUrl(String(newAsset._id)),
+      },
+    });
+  } catch (error: any) {
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    res.status(400).json({
+      code: 400,
+      message: error?.message || "服务器存储数据失败",
+    });
   }
 };
 
@@ -228,9 +304,110 @@ export const getMyAssets = async (req: Request, res: Response) => {
     const assets = await DataAsset.find({ userId }).sort({
       createdAt: -1,
     });
-    res.status(200).json({ code: 200, message: "获取数据成功", data: assets });
+    const data = assets.map((asset) => ({
+      ...asset.toObject(),
+      fileUrl: buildAssetFileUrl(String(asset._id)),
+    }));
+    res.status(200).json({ code: 200, message: "获取数据成功", data });
   } catch (error) {
     res.status(500).json({ code: 500, message: "服务器获取数据失败" });
+  }
+};
+
+export const getAssetFile = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const asset = await DataAsset.findById(req.params.id);
+
+    if (!asset || String(asset.userId) !== String(userId)) {
+      return res.status(404).json({ code: 404, message: "资产不存在" });
+    }
+
+    const filePath = assertPathInUploads(asset.path);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ code: 404, message: "资产文件不存在" });
+    }
+
+    const ext = path.extname(asset.filename || asset.name).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      ".glb": "model/gltf-binary",
+      ".czml": "application/json; charset=utf-8",
+      ".json": "application/json; charset=utf-8",
+      ".geojson": "application/geo+json; charset=utf-8",
+      ".tif": "image/tiff",
+      ".tiff": "image/tiff",
+      ".zip": "application/zip",
+    };
+
+    const contentType = contentTypes[ext];
+    if (contentType) {
+      res.setHeader("Content-Type", contentType);
+    }
+
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    return res.sendFile(filePath);
+  } catch (error: any) {
+    return res.status(500).json({
+      code: 500,
+      message: error?.message || "读取资产文件失败",
+    });
+  }
+};
+
+export const saveCzmlAsset = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const czml = req.body.czml;
+
+    if (!name) {
+      return res.status(400).json({ code: 400, message: "缺少场景名称" });
+    }
+
+    if (!Array.isArray(czml)) {
+      return res.status(400).json({ code: 400, message: "CZML 内容必须是数组" });
+    }
+
+    const userUploadDir = path.join(uploadsDataRoot, String(userId));
+    ensureDirectory(userUploadDir);
+
+    const baseName =
+      path
+        .basename(name, path.extname(name))
+        .replace(/[<>:"/\\|?*\x00-\x1f]+/g, "_")
+        .trim()
+        .slice(0, 80) || "scene";
+    const filename = `czml-${Date.now()}-${Math.round(Math.random() * 1e9)}.czml`;
+    const filePath = path.join(userUploadDir, filename);
+    const content = JSON.stringify(czml, null, 2);
+
+    fs.writeFileSync(filePath, content, "utf-8");
+
+    const stat = fs.statSync(filePath);
+    const asset = new DataAsset({
+      userId,
+      name: `${baseName}.czml`,
+      filename,
+      type: "czml",
+      size: stat.size,
+      path: filePath,
+    });
+
+    await asset.save();
+
+    return res.status(200).json({
+      code: 200,
+      message: "场景 CZML 保存成功",
+      data: {
+        ...asset.toObject(),
+        fileUrl: buildAssetFileUrl(String(asset._id)),
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      code: 500,
+      message: error?.message || "保存 CZML 场景失败",
+    });
   }
 };
 
@@ -287,6 +464,16 @@ export const publishData = async (req: Request, res: Response) => {
     }
 
     const fileExt = path.extname(filename).toLowerCase();
+
+    if (fileExt === ".glb" || fileExt === ".czml") {
+      return res.json({
+        code: 200,
+        message: fileExt === ".glb" ? "GLB 模型资产可用" : "CZML 场景资产可用",
+        resourceType: fileExt === ".glb" ? "model" : "czml",
+        fileUrl: buildAssetFileUrl(assetId),
+      });
+    }
+
     const wsExists = await gsClient.workspaces.exists(userWorkspace);
     if (!wsExists) {
       await gsClient.workspaces.create(userWorkspace);

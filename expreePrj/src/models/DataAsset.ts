@@ -1,9 +1,9 @@
-import { model, Schema } from "mongoose";
+import { Document, model, Schema, Types } from "mongoose";
 
 export interface IDataAsset extends Document {
-  _id?: Schema.Types.ObjectId;
+  _id: Types.ObjectId;
   id?: string;
-  userId: Schema.Types.ObjectId;
+  userId: Types.ObjectId;
   name: string;      // 原始文件名
   filename: string;  // 存储在磁盘上的文件名（可能包含时间戳防止重名）
   type: string;      // 文件后缀或类型 (geojson, tif, zip等)

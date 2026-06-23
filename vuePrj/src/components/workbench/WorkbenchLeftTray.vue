@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import type { WorkbenchLayerItem as LayerItem } from "@/views/Workbench.vue";
 import {
+  buildUserAssetFileUrl,
   fetchUserDatasets,
   publishUserDataset,
   sendDatasetCleanup,
@@ -13,6 +14,8 @@ interface UserDatasetItem {
   id: string;
   label: string;
   filename?: string;
+  path?: string;
+  fileUrl?: string;
   type: string;
   size: string;
 }
@@ -110,6 +113,8 @@ const toggleLeftPanel = async () => {
           ? item.name.replace(/\.zip$/i, ".shp")
           : item.name,
         filename: item.filename,
+        path: item.path,
+        fileUrl: item.fileUrl,
         type: item.type,
         size:
           item.size > 1024 * 1024
@@ -230,6 +235,52 @@ const handleDragEnd = () => {
   updateDraggingState(false);
 };
 
+const loadCzmlAsset = async (item: UserDatasetItem) => {
+  if (!props.viewer) {
+    return;
+  }
+
+  const token = localStorage.getItem("token");
+  const response = await fetch(item.fileUrl || buildUserAssetFileUrl(item.id), {
+    headers: token
+      ? {
+          Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
+        }
+      : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error("CZML 文件读取失败");
+  }
+
+  const czml = await response.json();
+  const dataSource = await Cesium.CzmlDataSource.load(czml);
+  await props.viewer.dataSources.add(dataSource);
+
+  if (dataSource.clock) {
+    props.viewer.clock.startTime = dataSource.clock.startTime.clone();
+    props.viewer.clock.stopTime = dataSource.clock.stopTime.clone();
+    props.viewer.clock.currentTime = dataSource.clock.currentTime.clone();
+    props.viewer.clock.multiplier = dataSource.clock.multiplier;
+    props.viewer.clock.shouldAnimate = true;
+  }
+
+  updateLayers([
+    ...props.layers,
+    {
+      id: item.id,
+      label: item.label,
+      visible: true,
+      cesiumLayer: null,
+      dataSource,
+      type: "czml",
+      assetId: item.id,
+    },
+  ]);
+
+  await props.viewer.flyTo(dataSource, { duration: 0.8 });
+};
+
 const handleDropOnMap = async () => {
   if (!draggedItem.value || !props.viewer) {
     return;
@@ -240,12 +291,25 @@ const handleDropOnMap = async () => {
   const itemFilename = draggedItem.value.filename;
   const itemType = draggedItem.value.type;
 
+  if (itemType === "glb") {
+    ElMessage.info("GLB 模型请在“场景创建”工具中添加到时间场景");
+    draggedItem.value = null;
+    updateDraggingState(false);
+    return;
+  }
+
   const loading = ElMessage.info({
     message: `正在发布数据：${itemName}...`,
     duration: 0,
   });
 
   try {
+    if (itemType === "czml") {
+      await loadCzmlAsset(draggedItem.value);
+      ElMessage.success(`CZML 场景加载成功：${itemName}`);
+      return;
+    }
+
     const res = await publishUserDataset({
       filename: itemFilename || itemName,
       assetId: itemId,

@@ -18,6 +18,7 @@ export interface PublishDatasetResponse {
   wmsUrl?: string;
   layers?: string;
   viewparams?: string;
+  fileUrl?: string;
   terrainUrl?: string;
   bounds?: [number, number, number, number];
   minzoom?: number;
@@ -53,6 +54,14 @@ export const publishUserDataset = async (
   payload: { filename: string; assetId: string },
 ): Promise<PublishDatasetResponse> => {
   const response = await service.post(API_ENDPOINTS.users.publishDataset, payload);
+  return response.data;
+};
+
+export const buildUserAssetFileUrl = (assetId: string | number) =>
+  `${BASE_URL}${API_ENDPOINTS.users.assetFile(assetId)}`;
+
+export const saveCzmlScene = async (payload: { name: string; czml: unknown[] }) => {
+  const response = await service.post(API_ENDPOINTS.users.saveCzml, payload);
   return response.data;
 };
 
