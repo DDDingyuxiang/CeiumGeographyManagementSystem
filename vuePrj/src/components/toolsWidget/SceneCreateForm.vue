@@ -674,7 +674,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="scene-create-form">
+  <div class="scene-create-form" @wheel.stop>
     <section class="scene-block scene-meta">
       <label class="field">
         <span>场景名称</span>
@@ -819,10 +819,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .scene-create-form {
   display: flex;
-  max-height: calc(100vh - 128px);
+  height: 100%;
+  min-height: 0;
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
   color: #dbeafe;
 }
 
@@ -1053,6 +1056,7 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   padding-bottom: 2px;
+  flex: 0 0 auto;
 }
 
 .primary-btn,

@@ -241,7 +241,10 @@ const loadCzmlAsset = async (item: UserDatasetItem) => {
   }
 
   const token = localStorage.getItem("token");
-  const response = await fetch(item.fileUrl || buildUserAssetFileUrl(item.id), {
+  const assetUrl = item.fileUrl && /^https?:\/\//.test(item.fileUrl)
+    ? item.fileUrl
+    : buildUserAssetFileUrl(item.id);
+  const response = await fetch(assetUrl, {
     headers: token
       ? {
           Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
@@ -254,6 +257,10 @@ const loadCzmlAsset = async (item: UserDatasetItem) => {
   }
 
   const czml = await response.json();
+  if (!Array.isArray(czml) || czml.length === 0) {
+    throw new Error("CZML 场景内容无效");
+  }
+
   const dataSource = await Cesium.CzmlDataSource.load(czml);
   await props.viewer.dataSources.add(dataSource);
 
@@ -289,7 +296,7 @@ const handleDropOnMap = async () => {
   const itemId = draggedItem.value.id;
   const itemName = draggedItem.value.label;
   const itemFilename = draggedItem.value.filename;
-  const itemType = draggedItem.value.type;
+  const itemType = draggedItem.value.type.toLowerCase();
 
   if (itemType === "glb") {
     ElMessage.info("GLB 模型请在“场景创建”工具中添加到时间场景");

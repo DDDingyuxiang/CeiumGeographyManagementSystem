@@ -1,322 +1,191 @@
-<div align="center">
+# Cesium GIS 空间分析平台
 
-# 🌍 GIS 地理信息管理平台
+一个面向空间数据管理、三维场景可视化与地理分析的全栈 GIS 应用。项目使用 Vue 构建前端交互界面，使用 Express 提供 API 服务，并集成 Cesium、GeoServer、MongoDB、PostgreSQL/PostGIS 与 Python GIS 工具链。
 
-**一站式空间数据管理、三维可视化与智能分析平台**
+> 本项目适用于本地开发与私有化部署。运行完整功能需要 MongoDB、PostgreSQL/PostGIS、GeoServer 和 Python GIS 环境等外部服务。
 
-[![Vue 3](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)](https://vuejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](https://expressjs.com/)
-[![Cesium](https://img.shields.io/badge/CesiumJS-1.139-006884?logo=cesium&logoColor=white)](https://cesium.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![GeoServer](https://img.shields.io/badge/GeoServer-2374b5?logo=openstreetmap&logoColor=white)](https://geoserver.org/)
-[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](./LICENSE)
+## 功能特性
 
-<br/>
+- 用户注册、登录、JWT 鉴权与个人资料管理
+- 个人空间数据资产的上传、查询、删除与存储用量统计
+- 基于 CesiumJS 的三维地图：图层显隐、排序、缩放定位与拖拽加载
+- 支持将矢量、栅格数据发布到 GeoServer，并通过 WMS 在地图中渲染
+- CZML 场景的创建、保存、加载与播放
+- 矢量分析：要素简化、缓冲区、叠加分析、质心提取
+- 栅格分析：裁剪、拼接、重采样、坡度坡向、等高线、山体阴影、NDVI、波段组合
+- 基于用户配置的大语言模型生成 GIS 分析计划
 
-一个基于 **CesiumJS 三维地球** 的前后端分离 GIS 平台，支持空间数据上传、GeoServer 自动发布、交互式地图可视化、丰富的空间分析工具，以及 **AI 驱动的智能分析助手**。
+## 技术架构
 
-</div>
-
----
-
-## ✨ 功能特性
-
-### 🔐 用户与权限
-
-- 用户注册 / 登录，JWT 鉴权，路由守卫
-- 个人中心：头像上传、昵称修改、密码管理
-- 数据统计：资产数量、存储占用一目了然
-
-### 📦 数据管理
-
-- 支持上传多种空间数据格式：`GeoJSON` / `SHP ZIP` / `TIFF` / `TIF`
-- Shapefile 上传自动校验 `.shp`、`.shx`、`.dbf` 配套文件
-- 个人中心支持数据筛选、查看与删除
-
-### 🗺️ 三维地图与图层管理
-
-- 基于 **CesiumJS** 的三维地球场景
-- 拖拽数据到地图，后端自动发布到 GeoServer 并回显
-- 图层列表：显示/隐藏、拖拽排序、右键缩放至范围、移除
-- 底层通过 `WebMapServiceImageryProvider` 加载 WMS 图层
-
-### 🧪 空间分析工具
-
-前端表单 → 后端调度 → Python 处理 → GeoServer 发布 → Cesium 回显，**完整闭环**：
-
-| 工具 | 类型 | 说明 |
-|------|------|------|
-| 缓冲区分析 | 矢量 | 基于矢量图层生成指定距离缓冲区 |
-| 要素简化 | 矢量 | 几何抽稀，支持容差和拓扑保持 |
-| 叠加分析 | 矢量 | 两个图层之间的交集、并集、擦除 |
-| 质心提取 | 矢量 | 几何质心 / 面内点两种模式 |
-| 坡度 / 坡向 | 栅格 | 基于 DEM 生成坡度或坡向栅格 |
-| 等高线提取 | 栅格 | 基于 DEM 提取矢量等高线 |
-| 山体阴影 | 栅格 | 基于 DEM 生成 hillshade 栅格 |
-
-### 🤖 AI 智能分析助手
-
-- 自然语言描述空间分析需求，AI 自动编排 GIS 工具链
-- 严格约束：只允许选择系统已有工具和用户数据，不可编造
-- 输出结构化 JSON 计划，用户确认后执行
-- 支持用户自配置 LLM 服务（OpenAI / DashScope / DeepSeek / 自定义）
-
----
-
-## 🏗️ 技术架构
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    前端 (vuePrj)                      │
-│   Vue 3 + TypeScript + Vite + Element Plus + Cesium  │
-└──────────────────────┬──────────────────────────────┘
-                       │ REST API
-┌──────────────────────▼──────────────────────────────┐
-│                   后端 (expreePrj)                    │
-│        Express 5 + TypeScript + JWT + Multer         │
-├──────────┬───────────┬───────────┬──────────────────┤
-│ MongoDB  │ PostgreSQL│ GeoServer │   Python (GIS)    │
-│ 用户/资产 │ GeoJSON   │ WMS 发布  │ GeoPandas/GDAL   │
-└──────────┴───────────┴───────────┴──────────────────┘
+```text
+浏览器
+  |
+  +-- vuePrj/       Vue 3 + TypeScript + Vite + Element Plus + CesiumJS
+  |       | REST / JSON
+  |
+  +-- expreePrj/    Express + TypeScript + JWT + Multer
+          +-- MongoDB            用户与资产元数据
+          +-- PostgreSQL/PostGIS 空间数据与分析支撑
+          +-- GeoServer          服务发布与 WMS 图层
+          +-- Python GIS 工具    GeoPandas / GDAL / Rasterio
 ```
 
----
+## 目录结构
 
-## 🚀 快速开始
+```text
+.
++-- vuePrj/                  # 前端应用
+|   +-- src/api/             # API 请求封装
+|   +-- src/components/      # 工作台、工具与 AI 组件
+|   +-- src/router/          # 路由与鉴权守卫
+|   +-- src/views/           # 登录、工作台、个人中心、设置页面
++-- expreePrj/               # 后端应用
+|   +-- src/analysis/        # 分析任务编排与 Python 脚本
+|   +-- src/controllers/     # 请求控制器
+|   +-- src/middleware/      # 鉴权与上传中间件
+|   +-- src/models/          # MongoDB 数据模型
+|   +-- src/routes/          # API 路由
++-- README.md
+```
 
-### 环境要求
+## 环境要求
 
-| 依赖 | 版本要求 |
-|------|---------|
-| Node.js | ≥ 20.19 或 ≥ 22.12 |
-| pnpm / npm | pnpm 10+ / npm 9+ |
-| MongoDB | 6.0+ |
-| PostgreSQL | 14+ |
-| GeoServer | 2.23+ |
-| Python | 3.10+（含 GeoPandas、Shapely、GDAL/Rasterio） |
+| 依赖 | 建议版本 | 用途 |
+| --- | --- | --- |
+| Node.js | `20.19+` 或 `22.12+` | 前后端运行环境 |
+| pnpm | `10+` | 包管理工具 |
+| MongoDB | `6+` | 用户与资产元数据 |
+| PostgreSQL + PostGIS | `14+` | 空间数据与分析支撑 |
+| GeoServer | `2.23+` | WMS 服务发布 |
+| Python | `3.10+` | GIS 分析脚本运行环境 |
 
-### 安装
+请为 `PYTHON_PATH` 指向的 Python 环境安装分析任务所需依赖，例如 GeoPandas、Shapely、GDAL 与 Rasterio。
+
+## 快速开始
+
+### 1. 克隆并安装依赖
 
 ```bash
-# 克隆仓库
-git clone https://github.com/DDDingyuxiang/CeiumGeographyManagementSystem.git
-cd your-repo
+git clone <你的仓库地址>
+cd Shijian
 
-# 安装前端依赖
 cd vuePrj
 pnpm install
 
-# 安装后端依赖
 cd ../expreePrj
 pnpm install
 ```
 
-### 环境配置
+### 2. 配置环境变量
 
-**后端** — 编辑 `expreePrj/.env`：
+创建 `expreePrj/.env`：
 
 ```env
 PORT=3000
 MONGO_URI=mongodb://127.0.0.1:27017/cesium_db
-JWT_SECRET=your-secret-key
+JWT_SECRET=请替换为足够长的随机密钥
 
-# GeoServer
 GEOSERVER_URL=http://localhost:8080/geoserver
 GEOSERVER_USER=admin
-GEOSERVER_PASS=geoserver
+GEOSERVER_PASSWORD=请替换为你的 GeoServer 密码
+GEOSERVER_WORKSPACE=user_data_space
 
-# PostgreSQL
-PG_HOST=localhost
-PG_PORT=5432
-PG_USER=postgres
-PG_PASSWORD=your-password
-PG_DATABASE=cesiumGeojsonDB
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=请替换为你的数据库密码
+DB_NAME=cesiumGeojsonDB
 
-# Python
+# 用于运行 GIS 分析脚本的 Python 可执行文件绝对路径
 PYTHON_PATH=/path/to/python
 ```
 
-**前端** — 编辑 `vuePrj/.env`：
+创建 `vuePrj/.env`：
 
 ```env
 VITE_API_ORIGIN=http://localhost:3000
-VITE_CESIUM_ACCESSTOKEN=your-cesium-ion-token
-VITE_GAODE_ACCESSTOKEN=your-gaode-token
+
+# 使用 Cesium Ion 资源时需要配置。
+VITE_CESIUM_ACCESSTOKEN=请替换为你的 Cesium Ion Token
+
+# 默认底图服务地址。
+VITE_GAODE_ACCESSTOKEN=https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}
 ```
 
-### 启动开发环境
+请不要提交真实的密钥、令牌或生产环境连接字符串。若这些信息曾被提交到版本控制，请立即轮换相关凭据。
+
+### 3. 启动服务
+
+先启动 MongoDB、PostgreSQL/PostGIS 与 GeoServer，再分别打开两个终端：
 
 ```bash
-# 终端 1：启动后端（默认端口 3000）
+# 终端 1：启动后端
 cd expreePrj
 pnpm dev
+```
 
-# 终端 2：启动前端（默认端口 5173）
+```bash
+# 终端 2：启动前端
 cd vuePrj
 pnpm dev
 ```
 
-浏览器访问 `http://localhost:5173` 即可。
+在浏览器访问 `http://localhost:5173`。后端默认监听 `http://localhost:3000`。
 
-### 构建部署
+## 常用命令
 
-```bash
-# 前端构建（类型检查 + 生产打包）
-cd vuePrj
-pnpm build
+| 目录 | 命令 | 说明 |
+| --- | --- | --- |
+| `vuePrj/` | `pnpm dev` | 启动 Vite 开发服务器 |
+| `vuePrj/` | `pnpm type-check` | 执行 Vue 与 TypeScript 类型检查 |
+| `vuePrj/` | `pnpm build` | 类型检查并构建前端生产包 |
+| `vuePrj/` | `pnpm preview` | 本地预览前端生产包 |
+| `expreePrj/` | `pnpm dev` | 以监听模式启动后端 |
+| `expreePrj/` | `pnpm build` | 编译后端 TypeScript 代码 |
+| `expreePrj/` | `pnpm start` | 启动编译后的后端服务 |
 
-# 后端编译
-cd expreePrj
-pnpm build
+## API 概览
 
-# 后端生产启动
-pnpm start
-```
+所有接口均以 `/api` 为前缀。需要鉴权的接口必须携带 `Authorization: Bearer <token>` 请求头。
 
----
+| 方法 | 接口 | 鉴权 | 说明 |
+| --- | --- | --- | --- |
+| `POST` | `/auth/register` | 否 | 注册用户 |
+| `POST` | `/auth/login` | 否 | 登录并获取 JWT |
+| `GET`、`PUT` | `/users/profile` | 是 | 获取或更新当前用户资料 |
+| `GET` | `/users/datasets` | 是 | 获取个人数据资产列表 |
+| `POST` | `/users/upload-data` | 是 | 上传空间数据资产 |
+| `POST` | `/users/datasets/publish` | 是 | 将支持的数据发布到 GeoServer |
+| `POST` | `/users/datasets/czml` | 是 | 保存 CZML 场景资产 |
+| `POST` | `/analysis/task` | 是 | 提交空间分析任务 |
+| `POST` | `/ai/plan` | 是 | 生成 AI 分析计划 |
 
-## 📁 项目结构
+## 支持的数据类型
 
-```
-├── vuePrj/                          # 前端项目
-│   └── src/
-│       ├── views/                   # 页面：登录、工作台、个人中心、设置
-│       ├── components/
-│       │   ├── workbench/           # 工作台组件：侧边栏、图层树、拖拽上图
-│       │   ├── toolsWidget/         # 空间分析工具表单组件
-│       │   └── ai/                  # AI 助手与报告组件
-│       ├── api/                     # Axios 请求封装
-│       ├── types/                   # TypeScript 类型定义
-│       ├── router/                  # 路由配置（含鉴权守卫）
-│       └── utils/                   # 工具函数（事件总线等）
-│
-├── expreePrj/                       # 后端项目
-│   └── src/
-│       ├── controllers/             # 路由控制器
-│       ├── routes/                  # API 路由定义
-│       ├── models/                  # Mongoose 数据模型
-│       ├── middleware/              # 鉴权、文件上传中间件
-│       ├── analysis/
-│       │   ├── analysisService.ts   # 分析任务调度
-│       │   ├── terrainService.ts    # 地形生成服务
-│       │   └── python/              # Python GIS 脚本（14 个）
-│       ├── ai/                      # AI 规划：工具目录、Prompt 构建、校验
-│       ├── config/                  # 数据库与 GeoServer 配置
-│       └── utils/                   # GeoServer 客户端封装
-│
-└── README.md
-```
+上传流程支持 GeoJSON、KML、GPX、TIFF/GeoTIFF 等常见矢量和栅格数据；Shapefile 请打包为 ZIP 文件上传，并至少包含 `.shp`、`.shx`、`.dbf` 文件。三维场景工作流还支持 GLB 模型与 CZML 文件。
 
----
+## 部署说明
 
-## 📡 API 接口
+- 在 `expreePrj/src/app.ts` 中将 CORS 来源替换为实际部署的前端地址。
+- 生产环境请使用 HTTPS，并通过部署平台的环境变量管理密钥，不要提交 `.env` 文件。
+- 上传目录和 GeoServer 数据目录应使用持久化存储；本地文件系统仅适用于开发环境。
+- 确保 `GEOSERVER_WORKSPACE` 指向可用工作区，并为后端账号授予发布资源所需权限。
+- 部署前端前，请使用生产环境的 `VITE_API_ORIGIN` 执行构建。
 
-<details>
-<summary><strong>点击展开完整 API 列表</strong></summary>
+## 贡献指南
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| `POST` | `/api/auth/register` | ❌ | 用户注册 |
-| `POST` | `/api/auth/login` | ❌ | 用户登录 |
-| `GET` | `/api/users/profile` | ✅ | 获取用户资料 |
-| `PUT` | `/api/users/profile` | ✅ | 更新用户资料 |
-| `GET` | `/api/users/ai-settings` | ✅ | 获取 AI 模型配置 |
-| `PUT` | `/api/users/ai-settings` | ✅ | 更新 AI 模型配置 |
-| `POST` | `/api/users/upload-data` | ✅ | 上传空间数据 |
-| `GET` | `/api/users/datasets` | ✅ | 获取数据资产列表 |
-| `GET` | `/api/users/assets/:id/file` | ✅ | 下载资产文件 |
-| `DELETE` | `/api/users/datasets/:id` | ✅ | 删除数据资产 |
-| `POST` | `/api/users/datasets/publish` | ✅ | 发布数据集到 GeoServer |
-| `POST` | `/api/users/datasets/czml` | ✅ | 保存 CZML 资产 |
-| `POST` | `/api/users/datasets/cleanup` | ❌ | 清理临时资源 |
-| `POST` | `/api/analysis/task` | ✅ | 提交空间分析任务 |
-| `POST` | `/api/ai/plan` | ✅ | AI 分析规划 |
+欢迎提交 Issue 和 Pull Request。提交前请确保：
 
-</details>
+1. 从当前默认分支创建一个聚焦的功能或修复分支。
+2. 保持改动范围明确，并记录任何配置变更。
+3. 在 `vuePrj/` 和 `expreePrj/` 中均执行 `pnpm build`。
+4. Bug 修复请提供复现步骤；涉及界面的改动建议附带截图。
+5. 不要提交密钥、令牌、上传文件或本地环境配置。
 
----
+## 安全说明
 
-## 🧑‍💻 本地开发
+项目会处理用户上传文件并连接外部 GIS 服务。部署到公网前，请检查并收紧访问控制、上传大小限制、CORS 来源、JWT 密钥管理以及 GeoServer 权限配置。
 
-### 常用命令
+## 开源许可证
 
-```bash
-# 前端
-cd vuePrj
-pnpm dev          # 启动开发服务器
-pnpm build        # 类型检查 + 生产构建
-pnpm type-check   # 仅类型检查
-pnpm build-only   # 仅 Vite 构建（跳过类型检查）
-
-# 后端
-cd expreePrj
-pnpm dev          # tsx watch 热重载开发
-pnpm build        # TypeScript 编译
-pnpm start        # 生产环境启动
-```
-
-### 开发注意事项
-
-- 后端 CORS 默认仅允许 `http://localhost:5173`
-- Python 分析脚本依赖 `geopandas`、`shapely`、`gdal`、`rasterio`，请确保 `PYTHON_PATH` 指向正确的环境
-- GeoServer 需提前创建名为 `cesium` 的工作区（或修改配置文件中的工作区名称）
-- AI 功能需要用户在「设置」页面配置自己的 LLM 服务密钥
-
----
-
-## 🗺️ 业务流程
-
-```
-注册/登录 → 上传空间数据 → 拖拽到地图 → 自动发布到 GeoServer
-                                              ↓
-                                    WMS 图层加载到 Cesium
-                                              ↓
-                              选择分析工具 / AI 自然语言描述
-                                              ↓
-                              Python 空间分析 → 结果发布 → 地图回显
-```
-
----
-
-## 🛣️ 后续规划
-
-- [ ] 更多分析工具：裁剪/掩膜、影像拼接、重采样、NDVI、波段组合
-- [ ] 格式转换服务
-- [ ] AI 分析报告自动生成
-- [ ] 地形数据（3D Tiles / Terrain）在线生成与加载
-- [ ] 服务切片缓存优化
-- [ ] 自动化出图与报表导出
-- [ ] 单元测试与集成测试覆盖
-
----
-
-## 🤝 参与贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本仓库
-2. 创建功能分支：`git checkout -b feature/amazing-feature`
-3. 提交更改：`git commit -m 'feat: add amazing feature'`
-4. 推送分支：`git push origin feature/amazing-feature`
-5. 提交 Pull Request
-
-请确保：
-- 代码通过 `npm run type-check`（前端）和 `npm run build`（后端）检查
-- 遵循项目已有的代码风格和目录结构
-- 新功能请附带必要的说明文档
-
----
-
-## 📄 开源许可
-
-本项目基于 [ISC License](./LICENSE) 开源。
-
----
-
-<div align="center">
-
-**如果这个项目对你有帮助，请给一个 ⭐ Star 支持一下！**
-
-</div>
+当前仓库尚未包含许可证文件。若计划公开分发或接收外部贡献，请先添加明确的开源许可证，例如 MIT 或 Apache-2.0。

@@ -64,7 +64,7 @@ export const login = async (req: Request, res: Response) => {
 		// 签发jwt
 		const token = jwt.sign(
 			{ id: user._id, account: user.account },
-			process.env.JWT_SECRET || "secert_key",
+			process.env.JWT_SECRET || "secret_key",
 			{
 				expiresIn: "24h",
 			},

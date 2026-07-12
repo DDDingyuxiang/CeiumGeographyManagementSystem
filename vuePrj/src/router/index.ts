@@ -24,7 +24,7 @@ const routes = [
         component:()=>import('@/views/Profile.vue'),
         meta:{
             title:'用户信息',
-            requiredAuth:true
+            requiresAuth:true
         }
     },
     {
@@ -33,7 +33,7 @@ const routes = [
         component:()=>import('@/views/Workbench.vue'),
         meta:{
             title:'数据查看与操作',
-            requiredAuth:true
+            requiresAuth:true
         }
     },
     {
@@ -42,7 +42,7 @@ const routes = [
         component:()=>import('@/views/settings.vue'),
         meta:{
             title:'系统设置',
-            requiredAuth:true
+            requiresAuth:true
         }
     }
 ];
@@ -55,8 +55,8 @@ const router = createRouter({
 // 路由守卫，无token跳转登陆
 router.beforeEach((to,from,next)=>{
     const token = localStorage.getItem('token');
-    if(to.meta.requiredAuth && !token){
-        next('/Login');
+    if(to.meta.requiresAuth && !token){
+        next('/login');
     }else{
         document.title  = to.meta.title || 'GIS Platform',
         next();

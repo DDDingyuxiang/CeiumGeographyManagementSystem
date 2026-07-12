@@ -104,6 +104,9 @@ const handleAddDrawingLayer = (layer: WorkbenchLayerItem) => {
   top: 70px;
   right: 20px;
   width: 300px;
+  max-height: calc(100vh - 90px);
+  display: flex;
+  flex-direction: column;
   background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -114,6 +117,8 @@ const handleAddDrawingLayer = (layer: WorkbenchLayerItem) => {
 
 .tool-panel-wrapper.scene-panel {
   width: 420px;
+  height: calc(100vh - 90px);
+  min-height: 0;
 }
 
 .tool-panel-header {
@@ -141,6 +146,10 @@ const handleAddDrawingLayer = (layer: WorkbenchLayerItem) => {
 }
 
 .tool-panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
   padding: 16px;
   color: #cbd5e1;
 }
